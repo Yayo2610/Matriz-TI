@@ -66,7 +66,7 @@ const API_URL = 'https://matriz-ti-backend.onrender.com/api/assets';
           <form onSubmit={async (e) => {
             e.preventDefault();
             try {
-              const res = await axios.post('https://matriz-ti-backend.onrender.com/api/auth/register', credentials);
+              const res = await axios.post('https://matriz-ti-backend.onrender.com/api/auth/login', credentials);
               localStorage.setItem('token', res.data.token);
               localStorage.setItem('username', res.data.username);
               setToken(res.data.token);
