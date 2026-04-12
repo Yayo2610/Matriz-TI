@@ -48,7 +48,7 @@ const API_URL = 'https://matriz-ti-backend.onrender.com/api/assets';
 
   const deleteAsset = async (id) => {
     if (window.confirm("¿Confirmas la baja de este activo?")) {
-      await axios.delete(`https://matriz-ti-backend.onrender.com/api/assets${id}`);
+      await axios.delete(`${API_URL}/${id}`);
       fetchAssets();
     }
   };
@@ -66,7 +66,7 @@ const API_URL = 'https://matriz-ti-backend.onrender.com/api/assets';
           <form onSubmit={async (e) => {
             e.preventDefault();
             try {
-              const res = await axios.post('https://matriz-ti-backend.onrender.com/api/login', credentials);
+              const res = await axios.post('https://matriz-ti-backend.onrender.com/api/auth/register', credentials);
               localStorage.setItem('token', res.data.token);
               localStorage.setItem('username', res.data.username);
               setToken(res.data.token);
