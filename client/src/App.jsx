@@ -160,3 +160,5 @@ function App() {
 }
 
 export default App;
+
+// Sprint 3: UI Pro con Lucide y Tailwind
