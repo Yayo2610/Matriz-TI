@@ -7,14 +7,15 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [user, setUser] = useState(localStorage.getItem('username'));
   const [credentials, setCredentials] = useState({ username: '', password: '' });
-  
+  // Cambia el localhost por tu URL de Render
+const API_URL = 'https://matriz-ti-backend.onrender.com/api/assets';
   // Estados para el CRUD
   const [form, setForm] = useState({ serialNumber: '', brand: '', model: '' });
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
 
   const fetchAssets = async () => {
-    const res = await axios.get('http://localhost:5000/api/assets');
+    const res = await axios.get(API_URL);
     setAssets(res.data);
   };
 
@@ -22,11 +23,11 @@ function App() {
     e.preventDefault();
     try {
       if (isEditing) {
-        await axios.put(`http://localhost:5000/api/assets/${editId}`, form);
+        await axios.put(`${API_URL}/${editId}`, form);
         setIsEditing(false);
         setEditId(null);
       } else {
-        await axios.post('http://localhost:5000/api/assets', form);
+        await axios.post(API_URL, form);
       }
       setForm({ serialNumber: '', brand: '', model: '' });
       fetchAssets();
