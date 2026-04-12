@@ -161,4 +161,4 @@ function App() {
 
 export default App;
 
-// Sprint 3: UI Pro con Lucide y Tailwind
+// Sprint Final: Lógica CRUD (Create, Read, Update, Delete) verificada.
