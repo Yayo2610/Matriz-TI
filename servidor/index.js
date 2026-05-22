@@ -17,18 +17,21 @@ const User = mongoose.model(
     password: { type: String, required: true },
   }),
 );
+// 1. Primero defines el esquema (fuera del modelo)
+const AssetSchema = new mongoose.Schema({
+  serialNumber: { type: String, required: true, unique: true },
+  brand: String,
+  model: String,
+  type: { type: String, required: true },
+  typeOther: { type: String, default: "" },
+  status: { type: String, default: "En Stock" },
+  assignedTo: { type: String, default: "N/A" },
+  department: { type: String, default: "N/A" },
+  assignmentDate: { type: Date, default: Date.now },
+});
 
-const Asset = mongoose.model(
-  "Asset",
-  new mongoose.Schema({
-    serialNumber: { type: String, required: true, unique: true },
-    brand: String,
-    model: String,
-    type: { type: String, default: "Laptop" },
-    status: { type: String, default: "En Stock" }, // <-- ¡Añade esta línea!
-  }),
-);
-
+// 2. Luego declaras el modelo una sola vez
+const Asset = mongoose.models.Asset || mongoose.model("Asset", AssetSchema);
 // --- 2. RUTAS DE AUTENTICACIÓN ---
 app.post("/api/auth/register", async (req, res) => {
   try {

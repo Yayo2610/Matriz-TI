@@ -20,17 +20,23 @@ function App() {
     username: "",
     password: "",
   });
+
   // Cambia el localhost por tu URL de Render
   const API_URL = "https://matriz-ti-backend.onrender.com/api/assets";
+
   // Estados para el CRUD
-  const [form, setForm] = useState({ serialNumber: "", brand: "", model: "" });
+  const [form, setForm] = useState({
+    serialNumber: "",
+    brand: "",
+    model: "",
+    type: "Computadora",
+    typeOther: "",
+    assignedTo: "",
+    department: "",
+  });
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
   const [actualizarMetricas, setActualizarMetricas] = useState(0);
-  const fetchAssets = async () => {
-    const res = await axios.get(API_URL);
-    setAssets(res.data);
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -42,11 +48,21 @@ function App() {
       } else {
         await axios.post(API_URL, form);
       }
-      setForm({ serialNumber: "", brand: "", model: "" });
+
+      // Reset del formulario con los nuevos campos
+      setForm({
+        serialNumber: "",
+        brand: "",
+        model: "",
+        type: "Computadora",
+        typeOther: "",
+        assignedTo: "",
+        department: "",
+      });
       fetchAssets();
       setActualizarMetricas((prev) => prev + 1);
     } catch (err) {
-      alert("Error: Revisa el S/N (debe ser único)");
+      alert("Error: Revisa los datos (S/N debe ser único)");
     }
   };
 
@@ -55,13 +71,25 @@ function App() {
       serialNumber: asset.serialNumber,
       brand: asset.brand,
       model: asset.model,
+      type: asset.type,
+      typeOther: asset.typeOther || "",
+      assignedTo: asset.assignedTo || "",
+      department: asset.department || "",
     });
     setEditId(asset._id);
     setIsEditing(true);
   };
 
   const cancelEdit = () => {
-    setForm({ serialNumber: "", brand: "", model: "" });
+    setForm({
+      serialNumber: "",
+      brand: "",
+      model: "",
+      type: "Computadora",
+      typeOther: "",
+      assignedTo: "",
+      department: "",
+    });
     setIsEditing(false);
     setEditId(null);
   };
@@ -70,7 +98,16 @@ function App() {
     if (window.confirm("¿Confirmas la baja de este activo?")) {
       await axios.delete(`${API_URL}/${id}`);
       fetchAssets();
-      etActualizarMetricas((prev) => prev + 1);
+      setActualizarMetricas((prev) => prev + 1); // <-- Corregido el typo aquí
+    }
+  };
+
+  const fetchAssets = async () => {
+    try {
+      const res = await axios.get(API_URL);
+      setAssets(res.data);
+    } catch (error) {
+      console.error("Error al obtener activos:", error);
     }
   };
 
@@ -202,6 +239,48 @@ function App() {
                 onChange={(e) => setForm({ ...form, model: e.target.value })}
                 required
               />
+
+              {/* Tipo de Equipo */}
+              <select
+                className="w-full p-3 bg-[#1f2937] rounded-xl outline-none focus:ring-2 ring-blue-500/50"
+                value={form.type}
+                onChange={(e) => setForm({ ...form, type: e.target.value })}
+              >
+                <option value="Computadora">Computadora</option>
+                <option value="Celular">Celular</option>
+                <option value="Otro">Otro</option>
+              </select>
+
+              {/* Campo manual "Otro" */}
+              {form.type === "Otro" && (
+                <input
+                  className="w-full p-3 bg-[#1f2937] rounded-xl outline-none focus:ring-2 ring-blue-500/50"
+                  placeholder="Especifica el equipo"
+                  value={form.typeOther}
+                  onChange={(e) =>
+                    setForm({ ...form, typeOther: e.target.value })
+                  }
+                />
+              )}
+
+              {/* Asignación y Área */}
+              <input
+                className="w-full p-3 bg-[#1f2937] rounded-xl outline-none focus:ring-2 ring-blue-500/50"
+                placeholder="Nombre de quien recibe"
+                value={form.assignedTo}
+                onChange={(e) =>
+                  setForm({ ...form, assignedTo: e.target.value })
+                }
+              />
+              <input
+                className="w-full p-3 bg-[#1f2937] rounded-xl outline-none focus:ring-2 ring-blue-500/50"
+                placeholder="Área de trabajo"
+                value={form.department}
+                onChange={(e) =>
+                  setForm({ ...form, department: e.target.value })
+                }
+              />
+
               <button
                 className={`w-full p-4 rounded-xl font-bold text-white transition ${isEditing ? "bg-yellow-600 hover:bg-yellow-500" : "bg-blue-600 hover:bg-blue-500"}`}
               >
@@ -235,6 +314,8 @@ function App() {
                 <tr>
                   <th className="px-8 py-5 text-left">Hardware</th>
                   <th className="px-8 py-5 text-left">Serial No.</th>
+                  <th className="px-8 py-5 text-left">Asignado a</th>
+                  <th className="px-8 py-5 text-left">Área</th>
                   <th className="px-8 py-5 text-right">Acciones</th>
                 </tr>
               </thead>
@@ -250,6 +331,15 @@ function App() {
                     <td className="px-8 py-5 font-mono text-sm text-blue-400/80">
                       {a.serialNumber}
                     </td>
+
+                    {/* Datos nuevos integrados correctamente */}
+                    <td className="px-8 py-5 text-slate-300">
+                      {a.assignedTo || "N/A"}
+                    </td>
+                    <td className="px-8 py-5 text-slate-300">
+                      {a.department || "N/A"}
+                    </td>
+
                     <td className="px-8 py-5 text-right flex justify-end gap-2">
                       <button
                         onClick={() => startEdit(a)}
@@ -276,5 +366,3 @@ function App() {
 }
 
 export default App;
-
-// Sprint Final: Lógica CRUD (Create, Read, Update, Delete) verificada.
