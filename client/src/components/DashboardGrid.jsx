@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 
-const DashboardGrid = () => {
+const DashboardGrid = ({ actualizarMetricas }) => {
   const [metrics, setMetrics] = useState({
     total: 0,
     status: { enStock: 0, asignado: 0, enMantenimiento: 0, dadoDeBaja: 0 },
@@ -21,7 +21,7 @@ const DashboardGrid = () => {
         console.error("Error cargando métricas:", err);
         setLoading(false);
       });
-  }, []);
+  }, [actualizarMetricas]);
 
   if (loading)
     return (

@@ -26,7 +26,7 @@ function App() {
   const [form, setForm] = useState({ serialNumber: "", brand: "", model: "" });
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
-
+  const [actualizarMetricas, setActualizarMetricas] = useState(0);
   const fetchAssets = async () => {
     const res = await axios.get(API_URL);
     setAssets(res.data);
@@ -44,6 +44,7 @@ function App() {
       }
       setForm({ serialNumber: "", brand: "", model: "" });
       fetchAssets();
+      setActualizarMetricas((prev) => prev + 1);
     } catch (err) {
       alert("Error: Revisa el S/N (debe ser único)");
     }
@@ -69,6 +70,7 @@ function App() {
     if (window.confirm("¿Confirmas la baja de este activo?")) {
       await axios.delete(`${API_URL}/${id}`);
       fetchAssets();
+      etActualizarMetricas((prev) => prev + 1);
     }
   };
 
@@ -161,7 +163,7 @@ function App() {
 
       {/* --- DASHBOARD EJECUTIVO --- */}
       <div className="max-w-7xl mx-auto px-6 pt-8">
-        <DashboardGrid />
+        <DashboardGrid actualizarMetricas={actualizarMetricas} />
       </div>
       {/* --------------------------- */}
 
