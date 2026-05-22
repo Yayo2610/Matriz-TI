@@ -102,6 +102,17 @@ function App() {
     }
   };
 
+  const handleStatusChange = async (id, newStatus) => {
+    try {
+      // Enviamos el nuevo estado al servidor
+      await axios.put(`${API_URL}/${id}`, { status: newStatus });
+      fetchAssets(); // Actualizamos la tabla
+      setActualizarMetricas((prev) => prev + 1); // ¡Esto hará que los recuadros de arriba se sumen automáticamente!
+    } catch (err) {
+      alert("Error al actualizar el estado");
+    }
+  };
+
   const fetchAssets = async () => {
     try {
       const res = await axios.get(API_URL);
@@ -348,19 +359,38 @@ function App() {
                         : "N/A"}
                     </td>
 
-                    <td className="px-8 py-5 text-right flex justify-end gap-2">
-                      <button
-                        onClick={() => startEdit(a)}
-                        className="p-2 text-slate-500 hover:text-yellow-500 transition cursor-pointer"
+                    {/* CELDA DE ACCIONES Y ESTADO */}
+                    <td className="px-8 py-5 flex items-center justify-end gap-4 text-right">
+                      {/* Lista desplegable para el estado */}
+                      <select
+                        value={a.status || "En Stock"}
+                        onChange={(e) =>
+                          handleStatusChange(a._id, e.target.value)
+                        }
+                        className="bg-[#1f2937] text-xs font-bold text-slate-300 p-2 rounded-lg outline-none border border-white/10 focus:border-blue-500 cursor-pointer transition"
                       >
-                        <Pencil size={18} />
-                      </button>
-                      <button
-                        onClick={() => deleteAsset(a._id)}
-                        className="p-2 text-slate-500 hover:text-red-500 transition cursor-pointer"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                        <option value="En Stock">En Stock</option>
+                        <option value="Asignado">Asignado</option>
+                        <option value="En Mantenimiento">Mantenimiento</option>
+                      </select>
+
+                      {/* Botones de Editar y Eliminar */}
+                      <div className="flex gap-2 border-l border-white/10 pl-4">
+                        <button
+                          onClick={() => startEdit(a)}
+                          className="p-2 text-slate-500 hover:text-yellow-500 transition cursor-pointer"
+                          title="Editar"
+                        >
+                          <Pencil size={18} />
+                        </button>
+                        <button
+                          onClick={() => deleteAsset(a._id)}
+                          className="p-2 text-slate-500 hover:text-red-500 transition cursor-pointer"
+                          title="Eliminar"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
