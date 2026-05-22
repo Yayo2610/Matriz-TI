@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const Asset = require("../Modelos/Asset"); // Ojo: La carpeta debe llamarse 'Modelos'
 
+console.log("==== LEYENDO NUEVAS RUTAS DE ASSETS ====");
+
 // GET: Obtener todos los equipos
 router.get("/", async (req, res) => {
   try {
@@ -73,6 +75,4 @@ router.put("/:id", async (req, res) => {
   });
   res.json(updatedAsset);
 });
-module.exports = router;
-
 module.exports = router;
