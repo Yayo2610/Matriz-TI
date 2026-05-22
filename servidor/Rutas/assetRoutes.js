@@ -74,3 +74,5 @@ router.put("/:id", async (req, res) => {
   res.json(updatedAsset);
 });
 module.exports = router;
+
+module.exports = router;
