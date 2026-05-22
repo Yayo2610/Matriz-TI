@@ -341,10 +341,10 @@ function App() {
                       {a.department || "N/A"}
                     </td>
 
-                    {/* NUEVA CELDA DE FECHA (Intenta leer createdAt o cambia por el nombre de tu campo) */}
+                    {/* CELDA DE FECHA CORREGIDA */}
                     <td className="px-8 py-5 text-slate-300 text-sm">
-                      {a.createdAt
-                        ? new Date(a.createdAt).toLocaleDateString()
+                      {a.assignmentDate
+                        ? new Date(a.assignmentDate).toLocaleDateString()
                         : "N/A"}
                     </td>
 
