@@ -316,6 +316,8 @@ function App() {
                   <th className="px-8 py-5 text-left">Serial No.</th>
                   <th className="px-8 py-5 text-left">Asignado a</th>
                   <th className="px-8 py-5 text-left">Área</th>
+                  <th className="px-8 py-5 text-left">Fecha</th>{" "}
+                  {/* <--- NUEVA COLUMNA */}
                   <th className="px-8 py-5 text-right">Acciones</th>
                 </tr>
               </thead>
@@ -332,12 +334,18 @@ function App() {
                       {a.serialNumber}
                     </td>
 
-                    {/* Datos nuevos integrados correctamente */}
                     <td className="px-8 py-5 text-slate-300">
                       {a.assignedTo || "N/A"}
                     </td>
                     <td className="px-8 py-5 text-slate-300">
                       {a.department || "N/A"}
+                    </td>
+
+                    {/* NUEVA CELDA DE FECHA (Intenta leer createdAt o cambia por el nombre de tu campo) */}
+                    <td className="px-8 py-5 text-slate-300 text-sm">
+                      {a.createdAt
+                        ? new Date(a.createdAt).toLocaleDateString()
+                        : "N/A"}
                     </td>
 
                     <td className="px-8 py-5 text-right flex justify-end gap-2">
