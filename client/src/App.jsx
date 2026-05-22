@@ -215,8 +215,9 @@ function App() {
       </div>
       {/* --------------------------- */}
 
-      <main className="max-w-7xl mx-auto p-6 grid lg:grid-cols-12 gap-8">
-        <aside className="lg:col-span-4">
+      <main className="max-w-7xl mx-auto p-6 grid lg:grid-cols-12 gap-9">
+        {/* ASIDE - FORMULARIO (Ahora col-span-3) */}
+        <aside className="lg:col-span-3">
           <div className="bg-[#111827] p-8 rounded-3xl border border-white/5 sticky top-28">
             <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
               {isEditing ? (
@@ -310,7 +311,8 @@ function App() {
           </div>
         </aside>
 
-        <section className="lg:col-span-8 bg-[#111827] rounded-3xl border border-white/5 overflow-hidden">
+        {/* SECTION - INVENTARIO (Ahora col-span-9 y SIN overflow-x-auto) */}
+        <section className="lg:col-span-9 bg-[#111827] rounded-3xl border border-white/5">
           <div className="p-8 border-b border-white/5 flex justify-between items-center">
             <h2 className="text-lg font-bold text-white uppercase tracking-widest text-sm">
               Inventario Actual
@@ -319,73 +321,84 @@ function App() {
               {assets.length} ITEMS
             </span>
           </div>
-          <div className="overflow-x-auto">
+          <div className="">
+            {" "}
+            {/* Eliminamos overflow-x-auto aquí */}
             <table className="w-full">
               <thead className="bg-white/2 text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">
                 <tr>
-                  <th className="px-8 py-5 text-left">Hardware</th>
-                  <th className="px-8 py-5 text-left">Serial No.</th>
-                  <th className="px-8 py-5 text-left">Asignado a</th>
-                  <th className="px-8 py-5 text-left">Área</th>
-                  <th className="px-8 py-5 text-left">Fecha</th>{" "}
-                  {/* <--- NUEVA COLUMNA */}
-                  <th className="px-8 py-5 text-right">Acciones</th>
+                  <th className="px-6 py-5 text-left">Hardware</th>{" "}
+                  {/* Reducimos px-8 a px-6 para ganar aire */}
+                  <th className="px-6 py-5 text-left">Serial No.</th>
+                  <th className="px-6 py-5 text-left">Asignado a</th>
+                  <th className="px-6 py-5 text-left">Área</th>
+                  <th className="px-6 py-5 text-left">Fecha</th>
+                  <th className="px-6 py-5 text-right">
+                    Estado y Acciones
+                  </th>{" "}
+                  {/* Título más descriptivo */}
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {assets.map((a) => (
                   <tr key={a._id} className="hover:bg-white/2 transition group">
-                    <td className="px-8 py-5">
+                    <td className="px-6 py-5">
                       <div className="text-white font-bold">{a.brand}</div>
                       <div className="text-xs text-slate-500 uppercase">
                         {a.model}
                       </div>
                     </td>
-                    <td className="px-8 py-5 font-mono text-sm text-blue-400/80">
+                    <td className="px-6 py-5 font-mono text-sm text-blue-400/80">
                       {a.serialNumber}
                     </td>
 
-                    <td className="px-8 py-5 text-slate-300">
+                    <td className="px-6 py-5 text-slate-300">
                       {a.assignedTo || "N/A"}
                     </td>
-                    <td className="px-8 py-5 text-slate-300">
+                    <td className="px-6 py-5 text-slate-300">
                       {a.department || "N/A"}
                     </td>
-
-                    {/* CELDA DE FECHA CORREGIDA */}
-                    <td className="px-8 py-5 text-slate-300 text-sm">
+                    <td className="px-6 py-5 text-slate-300">
                       {a.assignmentDate
                         ? new Date(a.assignmentDate).toLocaleDateString()
                         : "N/A"}
                     </td>
 
-                    {/* CELDA DE ACCIONES Y ESTADO */}
-                    <td className="px-8 py-5 flex items-center justify-end gap-4 text-right">
-                      {/* Lista desplegable para el estado */}
+                    {/* --- NUEVA CELDA DE ACCIONES REDISEÑADA --- */}
+                    <td className="px-6 py-5 flex items-center justify-end gap-3 text-right">
+                      {/* Lista desplegable Estilizada y Dinámica */}
                       <select
                         value={a.status || "En Stock"}
                         onChange={(e) =>
                           handleStatusChange(a._id, e.target.value)
                         }
-                        className="bg-[#1f2937] text-xs font-bold text-slate-300 p-2 rounded-lg outline-none border border-white/10 focus:border-blue-500 cursor-pointer transition"
+                        className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm outline-none ${
+                          a.status === "En Stock"
+                            ? "bg-blue-600/10 text-blue-400 border-blue-500/20 focus:border-blue-500"
+                            : a.status === "Asignado"
+                              ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/20 focus:border-emerald-500"
+                              : a.status === "En Mantenimiento"
+                                ? "bg-orange-600/10 text-orange-400 border-orange-500/20 focus:border-orange-500"
+                                : "bg-[#1f2937] text-slate-300 border-white/10"
+                        }`}
                       >
                         <option value="En Stock">En Stock</option>
                         <option value="Asignado">Asignado</option>
                         <option value="En Mantenimiento">Mantenimiento</option>
                       </select>
 
-                      {/* Botones de Editar y Eliminar */}
-                      <div className="flex gap-2 border-l border-white/10 pl-4">
+                      {/* Botones de Editar y Eliminar separados */}
+                      <div className="flex gap-1.5 pl-3 border-l border-white/10">
                         <button
                           onClick={() => startEdit(a)}
-                          className="p-2 text-slate-500 hover:text-yellow-500 transition cursor-pointer"
+                          className="p-2 rounded-lg text-slate-500 hover:text-yellow-500 hover:bg-yellow-500/10 transition cursor-pointer"
                           title="Editar"
                         >
                           <Pencil size={18} />
                         </button>
                         <button
                           onClick={() => deleteAsset(a._id)}
-                          className="p-2 text-slate-500 hover:text-red-500 transition cursor-pointer"
+                          className="p-2 rounded-lg text-slate-500 hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer"
                           title="Eliminar"
                         >
                           <Trash2 size={18} />
