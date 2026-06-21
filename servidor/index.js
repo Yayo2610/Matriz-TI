@@ -55,17 +55,17 @@ const validarActivo = [
 // 🗄️ MODELOS DE DATOS (Mongoose) - MODIFICADO PARA S6
 // ==========================================
 const User =
-  mongoose.models.User ||
+  mongoose.models.Account ||
   mongoose.model(
-    "User",
+    "Account",
     new mongoose.Schema(
       {
-        email: { type: String, required: true, unique: true, trim: true }, // Cambiado de username a email
+        email: { type: String, required: true, unique: true, trim: true },
         password: { type: String, required: true },
         role: {
           type: String,
           required: true,
-          enum: ["admin", "tecnico", "coordinador"], // Los 3 roles fijos predefinidos de la documentación
+          enum: ["admin", "tecnico", "coordinador"],
         },
       },
       { timestamps: true },
