@@ -14,14 +14,14 @@ const app = express();
 // 🛡️ CONFIGURACIÓN DE HARDENING Y MITIGACIÓN (Sprint 5)
 // ==========================================
 app.use(helmet());
-app.disable("x-powered-by"); // Oculta Express de las cabeceras HTTP
+app.disable("x-powered-by");
 app.use(cors());
 app.use(express.json());
 
 // Configuramos el Rate Limiter contra Fuerza Bruta / DoS
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // Límite de 100 peticiones por IP
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: {
     success: false,
     message: "Demasiadas peticiones desde esta IP, intenta de nuevo más tarde.",
@@ -52,16 +52,24 @@ const validarActivo = [
 ];
 
 // ==========================================
-// 🗄️ MODELOS DE DATOS (Mongoose)
+// 🗄️ MODELOS DE DATOS (Mongoose) - MODIFICADO PARA S6
 // ==========================================
 const User =
   mongoose.models.User ||
   mongoose.model(
     "User",
-    new mongoose.Schema({
-      username: { type: String, required: true, unique: true },
-      password: { type: String, required: true },
-    }),
+    new mongoose.Schema(
+      {
+        email: { type: String, required: true, unique: true, trim: true }, // Cambiado de username a email
+        password: { type: String, required: true },
+        role: {
+          type: String,
+          required: true,
+          enum: ["admin", "tecnico", "coordinador"], // Los 3 roles fijos predefinidos de la documentación
+        },
+      },
+      { timestamps: true },
+    ),
   );
 
 const AssetSchema = new mongoose.Schema({
@@ -79,38 +87,45 @@ const AssetSchema = new mongoose.Schema({
 const Asset = mongoose.models.Asset || mongoose.model("Asset", AssetSchema);
 
 // ==========================================
-// 🔑 RUTAS DE AUTENTICACIÓN
+// 🔑 RUTAS DE AUTENTICACIÓN - MODIFICADO PARA S6
 // ==========================================
 app.post("/api/auth/register", async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { email, password, role } = req.body; // Desestructuramos email y el nuevo campo role
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ username, password: hashedPassword });
+
+    const user = new User({
+      email,
+      password: hashedPassword,
+      role, // Guardamos el rol de forma local en la BD
+    });
+
     await user.save();
     res.status(201).json({ message: "Usuario creado con éxito" });
   } catch (err) {
-    res
-      .status(400)
-      .json({
-        error: "Error al registrar usuario (el usuario podría ya existir)",
-      });
+    res.status(400).json({
+      error:
+        "Error al registrar usuario (el correo podría ya existir o el rol es inválido)",
+    });
   }
 });
 
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { username, password } = req.body;
-    const user = await User.findOne({ username });
+    const { email, password } = req.body; // Cambiado de username a email
+    const user = await User.findOne({ email });
+
     if (user && (await bcrypt.compare(password, user.password))) {
-      // Nota: Idealmente cambia esta clave manual por process.env.JWT_SECRET en el Sprint 6
+      // Firmamos el token inyectando el ID y el ROL del usuario (Indispensable para el futuro Sprint 7)
       const token = jwt.sign(
-        { id: user._id },
+        { id: user._id, role: user.role },
         process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",
         {
-          expiresIn: "2h",
+          expiresIn: "8h", // Modificado a 8 horas para cubrir una jornada laboral de soporte estándar
         },
       );
-      res.json({ token, username: user.username });
+      // Respondemos con el token y el rol para que el Frontend de React pueda ocultar/mostrar vistas
+      res.json({ token, role: user.role });
     } else {
       res.status(401).json({ error: "Credenciales inválidas" });
     }
