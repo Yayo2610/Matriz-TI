@@ -1,0 +1,142 @@
+{
+  "version": "2.0.0",
+  "darkMode": true,
+  "gridEnabling": false,
+  "currentViewName": null,
+  "defaultView": {
+    "detailLevel": "All",
+    "tablePositions": [
+      {
+        "name": "roles",
+        "schemaName": "public",
+        "x": 16,
+        "y": 16
+      },
+      {
+        "name": "usuarios",
+        "schemaName": "public",
+        "x": 472,
+        "y": 16
+      },
+      {
+        "name": "permisos",
+        "schemaName": "public",
+        "x": 952,
+        "y": 16
+      },
+      {
+        "name": "empleados",
+        "schemaName": "public",
+        "x": 16,
+        "y": 184
+      },
+      {
+        "name": "activos",
+        "schemaName": "public",
+        "x": 952,
+        "y": 248
+      },
+      {
+        "name": "historial_activos",
+        "schemaName": "public",
+        "x": 1456,
+        "y": 16
+      }
+    ],
+    "tableGroupCollapseStates": [],
+    "stickyNoteLayouts": [],
+    "referencePaths": [
+      {
+        "firstFieldNames": [
+          "id_rol"
+        ],
+        "firstTableName": "roles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "id_rol"
+        ],
+        "secondTableName": "usuarios",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id_usuario"
+        ],
+        "firstTableName": "usuarios",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "id_usuario"
+        ],
+        "secondTableName": "permisos",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id_empleado"
+        ],
+        "firstTableName": "empleados",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "id_empleado"
+        ],
+        "secondTableName": "activos",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id_usuario"
+        ],
+        "firstTableName": "usuarios",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "id_usuario_registro"
+        ],
+        "secondTableName": "activos",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id_activo"
+        ],
+        "firstTableName": "activos",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "id_activo"
+        ],
+        "secondTableName": "historial_activos",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id_usuario"
+        ],
+        "firstTableName": "usuarios",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "id_usuario"
+        ],
+        "secondTableName": "historial_activos",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      }
+    ]
+  },
+  "views": {}
+}
