@@ -151,6 +151,28 @@ function App() {
     }
   };
 
+  const handleDeleteAllAssets = async () => {
+    // Confirmación con diálogo nativo
+    const confirmacion = window.confirm(
+      "⚠️ ¿Estás seguro de eliminar TODOS los activos?\n\nEsta acción es irreversible y borrará todos los equipos del inventario permanentemente.",
+    );
+    if (!confirmacion) return;
+
+    try {
+      const response = await axios.delete(`${API_URL}/clear`, clientConfig);
+      alert(`✅ ${response.data.message}`);
+      // Refrescar lista y métricas
+      fetchAssets();
+      setActualizarMetricas((prev) => prev + 1);
+    } catch (err) {
+      console.error(
+        "Error al eliminar todos:",
+        err.response?.data || err.message,
+      );
+      alert(`❌ Error: ${err.response?.data?.error || "No se pudo eliminar"}`);
+    }
+  };
+
   const handleBulkUploadAssets = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -760,9 +782,20 @@ function App() {
                 <h2 className="text-sm font-bold text-white uppercase tracking-widest">
                   Inventario Actual
                 </h2>
-                <span className="bg-blue-500/10 text-blue-500 px-4 py-1 rounded-full text-xs font-black">
-                  {filteredAssets.length} ITEMS
-                </span>
+                <div className="flex items-center gap-4">
+                  <span className="bg-blue-500/10 text-blue-500 px-4 py-1 rounded-full text-xs font-black">
+                    {filteredAssets.length} ITEMS
+                  </span>
+                  {role === "admin" && (
+                    <button
+                      onClick={handleDeleteAllAssets}
+                      className="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-4 py-2 rounded-xl text-xs font-bold transition-colors"
+                    >
+                      <Trash2 size={16} />
+                      Eliminar todos
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* FILTROS ORIGINALES */}
