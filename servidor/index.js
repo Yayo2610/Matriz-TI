@@ -306,8 +306,11 @@ app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
 // 🗑️ ELIMINAR TODOS LOS ACTIVOS (SOLO ADMIN)
 // ==========================================
 const verificarToken = (req, res, next) => {
+  console.log("🔍 [verificarToken] Iniciando verificación...");
   const authHeader = req.headers.authorization;
+  console.log("🔍 [verificarToken] Header Authorization:", authHeader);
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    console.log("❌ [verificarToken] Token no proporcionado o mal formado");
     return res.status(401).json({ error: "Token no proporcionado" });
   }
   const token = authHeader.split(" ")[1];
@@ -316,31 +319,40 @@ const verificarToken = (req, res, next) => {
       token,
       process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",
     );
-    req.user = decoded;
+    console.log("✅ [verificarToken] Token decodificado:", decoded);
+    req.user = decoded; // { id, role }
     next();
   } catch (err) {
+    console.log("❌ [verificarToken] Error al verificar token:", err.message);
     return res.status(403).json({ error: "Token inválido o expirado" });
   }
 };
 
 app.delete("/api/assets/clear", verificarToken, async (req, res) => {
+  console.log("🗑️ [DELETE /clear] Petición recibida");
+  console.log("👤 [DELETE /clear] Usuario autenticado:", req.user);
+
+  // Solo admin puede eliminar todo
   if (req.user.role !== "admin") {
+    console.log("❌ [DELETE /clear] Usuario no es admin:", req.user.role);
     return res
       .status(403)
       .json({ error: "No tienes permisos para esta acción" });
   }
+
   try {
     const result = await Asset.deleteMany({});
+    console.log(`✅ [DELETE /clear] Eliminados ${result.deletedCount} activos`);
     res.json({
       success: true,
       message: `Se eliminaron ${result.deletedCount} activos permanentemente.`,
       deletedCount: result.deletedCount,
     });
   } catch (err) {
+    console.error("❌ [DELETE /clear] Error al eliminar:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
-
 // ==========================================
 // 🔌 CONEXIÓN Y ARRANQUE
 // ==========================================
