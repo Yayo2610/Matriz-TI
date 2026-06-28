@@ -137,58 +137,39 @@ function App() {
 
     const reader = new FileReader();
 
-    // Función para pausar la ejecución de forma elegante
-    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
     reader.onload = async (event) => {
       const text = event.target.result.replace(/\r/g, "");
       const lines = text.split("\n").slice(1);
+      const dataToUpload = []; // Armamos el paquete aquí
 
-      let exitosos = 0;
-      let fallidos = 0;
-
-      // Procesamos fila por fila con un "freno"
-      for (let i = 0; i < lines.length; i++) {
-        const row = lines[i].trim();
-        if (!row) continue;
-
-        const separator = row.includes(";") ? ";" : ",";
-        const columns = row.split(separator).map((col) => col.trim());
+      for (let row of lines) {
+        if (!row.trim()) continue;
+        const columns = row.split(",").map((col) => col.trim());
         const [sn, brand, model, type, assigned, dept] = columns;
 
-        if (!sn) continue;
-
-        try {
-          await axios.post(
-            API_URL,
-            {
-              serialNumber: sn,
-              brand: brand || "Genérico",
-              model: model || "N/A",
-              type: type || "Computadora",
-              assignedTo: assigned || "",
-              department: dept || "",
-              status: assigned ? "Asignado" : "En Stock",
-            },
-            clientConfig,
-          );
-
-          exitosos++;
-
-          // ¡Aquí está el secreto!
-          // Pausamos 800ms entre cada petición para respetar el límite de Render.
-          // Si te sigue dando 429, aumenta este número a 1000 o 1200.
-          await delay(800);
-        } catch (err) {
-          fallidos++;
-          console.error(`Fallo al subir S/N: ${sn}`, err.message);
+        if (sn) {
+          dataToUpload.push({
+            serialNumber: sn,
+            brand: brand || "Genérico",
+            model: model || "N/A",
+            type: type || "Computadora",
+            assignedTo: assigned || "",
+            department: dept || "",
+            status: assigned ? "Asignado" : "En Stock",
+          });
         }
       }
 
-      fetchAssets();
-      alert(`📥 Carga finalizada: ${exitosos} exitosos, ${fallidos} fallidos.`);
+      // UNA SOLA PETICIÓN AL ENDPOINT /bulk
+      try {
+        await axios.post(`${API_URL}/bulk`, dataToUpload, clientConfig);
+        alert("Carga masiva exitosa. Base de datos actualizada.");
+        fetchAssets();
+      } catch (err) {
+        alert("Error al subir el lote de datos.");
+        console.error("Detalle:", err.response?.data || err.message);
+      }
     };
-
     reader.readAsText(file);
   };
   // 👥 PROPUESTA 2: Procesador de Importación del Directorio de Personal (Nómina en CSV)
