@@ -6,7 +6,7 @@ const bcrypt = require("bcryptjs");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const { body, validationResult } = require("express-validator");
-const multer = require("multer"); // ✅ CORREGIDO: "multer" no "mutter"
+const multer = require("multer");
 const csv = require("csv-parser");
 const { Readable } = require("stream");
 require("dotenv").config();
@@ -16,7 +16,7 @@ const app = express();
 // ==========================================
 // 🛡️ CONFIGURACIÓN DE HARDENING
 // ==========================================
-app.set("trust proxy", 1); // ✅ Para que rate-limit funcione correctamente en Render
+app.set("trust proxy", 1);
 app.use(helmet());
 app.disable("x-powered-by");
 app.use(cors());
@@ -31,6 +31,34 @@ const limiter = rateLimit({
   },
 });
 app.use(limiter);
+
+// ==========================================
+// 🔑 MIDDLEWARE DE VERIFICACIÓN DE TOKEN
+// ==========================================
+const verificarToken = (req, res, next) => {
+  console.log("🔍 [verificarToken] Iniciando verificación...");
+  const authHeader = req.headers.authorization;
+  console.log("🔍 [verificarToken] Header Authorization:", authHeader);
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    console.log("❌ [verificarToken] Token no proporcionado o mal formado");
+    return res.status(401).json({ error: "Token no proporcionado" });
+  }
+
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",
+    );
+    console.log("✅ [verificarToken] Token decodificado:", decoded);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    console.log("❌ [verificarToken] Error al verificar token:", err.message);
+    return res.status(403).json({ error: "Token inválido o expirado" });
+  }
+};
 
 // ==========================================
 // 🛡️ MIDDLEWARES DE VALIDACIÓN
@@ -189,15 +217,6 @@ app.post("/api/assets", validarActivo, async (req, res) => {
   }
 });
 
-app.delete("/api/assets/:id", async (req, res) => {
-  try {
-    await Asset.findByIdAndDelete(req.params.id);
-    res.json({ message: "Activo eliminado" });
-  } catch (err) {
-    res.status(400).json({ error: "No se pudo eliminar el activo" });
-  }
-});
-
 app.put("/api/assets/:id", async (req, res) => {
   try {
     const updatedAsset = await Asset.findByIdAndUpdate(
@@ -212,7 +231,7 @@ app.put("/api/assets/:id", async (req, res) => {
 });
 
 // ==========================================
-// 🚀 NUEVA RUTA PARA CARGA MASIVA (CSV)
+// 🚀 CARGA MASIVA (CSV)
 // ==========================================
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
@@ -236,7 +255,7 @@ app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
         .pipe(
           csv({
             headers: ["S/N", "Marca", "Modelo", "Tipo", "Nombre", "Área"],
-            skipLines: 0, // Cambia a 1 si la primera fila es encabezado
+            skipLines: 0,
           }),
         )
         .on("data", (row) => {
@@ -244,16 +263,14 @@ app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
           const brand = row["Marca"]?.trim() || "";
           const model = row["Modelo"]?.trim() || "";
           const type = row["Tipo"]?.trim() || "";
-          const name = row["Nombre"]?.trim() || ""; // ← Este es el nombre del asignado
+          const name = row["Nombre"]?.trim() || "";
           const area = row["Área"]?.trim() || "";
 
-          // Validar campos obligatorios
           if (!serialNumber || !brand || !model || !type || !name || !area) {
             console.warn("Fila incompleta:", row);
             return;
           }
 
-          // 👇 Lógica para asignar estado y asignación
           const assignedTo = name && name !== "" ? name : "N/A";
           const status = name && name !== "" ? "Asignado" : "En Stock";
           const department = area && area !== "" ? area : "N/A";
@@ -263,8 +280,8 @@ app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
             brand,
             model,
             type,
-            status, // ← Ahora dinámico
-            assignedTo, // ← El nombre del asignado
+            status,
+            assignedTo,
             department,
           });
         })
@@ -301,10 +318,12 @@ app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
 // ==========================================
-// 🗑️ ELIMINAR TODOS LOS ACTIVOS (SOLO ADMIN)
+// 🗑️ RUTAS DELETE (ORDEN CORRECTO)
 // ==========================================
-// 📌 RUTAS ESPECÍFICAS PRIMERO
+
+// ✅ PRIMERO: Ruta específica /clear (solo admin)
 app.delete("/api/assets/clear", verificarToken, async (req, res) => {
   console.log("🗑️ [DELETE /clear] Petición recibida");
   console.log("👤 [DELETE /clear] Usuario autenticado:", req.user);
@@ -330,7 +349,7 @@ app.delete("/api/assets/clear", verificarToken, async (req, res) => {
   }
 });
 
-// 📌 RUTAS CON PARÁMETROS DESPUÉS
+// ✅ DESPUÉS: Ruta con parámetro /:id (eliminación individual)
 app.delete("/api/assets/:id", async (req, res) => {
   console.log(`🗑️ [DELETE /:id] Eliminando activo ${req.params.id}`);
   try {
@@ -340,15 +359,7 @@ app.delete("/api/assets/:id", async (req, res) => {
     res.status(400).json({ error: "No se pudo eliminar el activo" });
   }
 });
-// ✅ RUTA /:id DEBE IR DESPUÉS DE /clear
-app.delete("/api/assets/:id", async (req, res) => {
-  try {
-    await Asset.findByIdAndDelete(req.params.id);
-    res.json({ message: "Activo eliminado" });
-  } catch (err) {
-    res.status(400).json({ error: "No se pudo eliminar el activo" });
-  }
-});
+
 // ==========================================
 // 🔌 CONEXIÓN Y ARRANQUE
 // ==========================================
