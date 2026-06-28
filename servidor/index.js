@@ -301,18 +301,21 @@ app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
 // ==========================================
 // 🗑️ ELIMINAR TODOS LOS ACTIVOS (SOLO ADMIN)
 // ==========================================
+
+// Middleware de verificación de token (debe definirse ANTES de usarlo)
 const verificarToken = (req, res, next) => {
   console.log("🔍 [verificarToken] Iniciando verificación...");
   const authHeader = req.headers.authorization;
   console.log("🔍 [verificarToken] Header Authorization:", authHeader);
+
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     console.log("❌ [verificarToken] Token no proporcionado o mal formado");
     return res.status(401).json({ error: "Token no proporcionado" });
   }
+
   const token = authHeader.split(" ")[1];
   try {
     const decoded = jwt.verify(
@@ -328,6 +331,7 @@ const verificarToken = (req, res, next) => {
   }
 };
 
+// ✅ RUTA /clear DEBE IR ANTES DE /:id
 app.delete("/api/assets/clear", verificarToken, async (req, res) => {
   console.log("🗑️ [DELETE /clear] Petición recibida");
   console.log("👤 [DELETE /clear] Usuario autenticado:", req.user);
@@ -351,6 +355,16 @@ app.delete("/api/assets/clear", verificarToken, async (req, res) => {
   } catch (err) {
     console.error("❌ [DELETE /clear] Error al eliminar:", err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ RUTA /:id DEBE IR DESPUÉS DE /clear
+app.delete("/api/assets/:id", async (req, res) => {
+  try {
+    await Asset.findByIdAndDelete(req.params.id);
+    res.json({ message: "Activo eliminado" });
+  } catch (err) {
+    res.status(400).json({ error: "No se pudo eliminar el activo" });
   }
 });
 // ==========================================
