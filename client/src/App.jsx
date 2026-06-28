@@ -105,14 +105,33 @@ function App() {
   // --- COMPORTAMIENTO DE ACTIVOS ---
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // 1. Forzamos el cálculo estricto del estado
+    const estadoReal =
+      form.assignedTo && form.assignedTo.trim() !== ""
+        ? "Asignado"
+        : "En Stock";
+
+    // 2. Empaquetamos los datos
+    const payload = {
+      ...form,
+      status: estadoReal,
+    };
+
+    console.log("📦 PAQUETE QUE REACT ENVÍA AL BACKEND:", payload);
+
     try {
       if (isEditing) {
-        await axios.put(`${API_URL}/${editId}`, form, clientConfig);
+        // Actualizar equipo existente
+        await axios.put(`${API_URL}/${editId}`, payload, clientConfig);
         setIsEditing(false);
         setEditId(null);
       } else {
-        await axios.post(API_URL, form, clientConfig);
+        // Crear equipo nuevo
+        await axios.post(API_URL, payload, clientConfig);
       }
+
+      // Limpiamos el formulario
       setForm({
         serialNumber: "",
         brand: "",
@@ -125,12 +144,13 @@ function App() {
       fetchAssets();
       setActualizarMetricas((prev) => prev + 1);
     } catch (err) {
-      alert("Error al procesar el activo.");
+      console.error("Error del backend:", err.response?.data || err.message);
+      alert(
+        `Error al guardar: ${err.response?.data?.message || "Revisa la consola"}`,
+      );
     }
   };
 
-  // 🦾 PROPUESTA 1: Procesador de Carga Masiva de Activos Existentes (Formato CSV de Excel)
-  // --- CARGA MASIVA CON CONTROL DE TRÁFICO (THROTTLING) ---
   const handleBulkUploadAssets = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -140,7 +160,7 @@ function App() {
     reader.onload = async (event) => {
       const text = event.target.result.replace(/\r/g, "");
       const lines = text.split("\n").slice(1);
-      const dataToUpload = []; // Armamos el paquete aquí
+      const dataToUpload = [];
 
       for (let row of lines) {
         if (!row.trim()) continue;
@@ -160,7 +180,6 @@ function App() {
         }
       }
 
-      // UNA SOLA PETICIÓN AL ENDPOINT /bulk
       try {
         await axios.post(`${API_URL}/bulk`, dataToUpload, clientConfig);
         alert("Carga masiva exitosa. Base de datos actualizada.");
@@ -606,6 +625,11 @@ function App() {
                               Asignar desde Nómina
                             </label>
                             <select
+                              value={
+                                employeesDirectory?.find(
+                                  (em) => em.fullName === form.assignedTo,
+                                )?.id || ""
+                              }
                               className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-slate-200 border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs cursor-pointer"
                               onChange={(e) => {
                                 const val = e.target.value;
@@ -616,25 +640,28 @@ function App() {
                                     department: "",
                                   });
                                 } else {
-                                  const em = employeesDirectory.find(
+                                  const em = employeesDirectory?.find(
                                     (x) => x.id === val,
                                   );
-                                  setForm({
-                                    ...form,
-                                    assignedTo: em.fullName,
-                                    department: em.area,
-                                  });
+                                  if (em) {
+                                    setForm({
+                                      ...form,
+                                      assignedTo: em.fullName,
+                                      department: em.area,
+                                    });
+                                  }
                                 }
                               }}
                             >
                               <option value="">
                                 -- Seleccionar Titular --
                               </option>
-                              {employeesDirectory.map((em) => (
-                                <option key={em.id} value={em.id}>
-                                  {em.fullName}
-                                </option>
-                              ))}
+                              {employeesDirectory &&
+                                employeesDirectory.map((em) => (
+                                  <option key={em.id} value={em.id}>
+                                    {em.fullName}
+                                  </option>
+                                ))}
                             </select>
                             {form.department && (
                               <div className="text-[9px] text-slate-500 px-1 mt-1">

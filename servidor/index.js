@@ -231,5 +231,9 @@ if (process.env.NODE_ENV !== "test") {
     console.log(`🚀 Servidor AssetTrack en puerto ${PORT}`),
   );
 }
+app.use((req, res, next) => {
+  console.log(`Petición recibida: ${req.method} ${req.url}`);
+  next();
+});
 
 module.exports = app;
