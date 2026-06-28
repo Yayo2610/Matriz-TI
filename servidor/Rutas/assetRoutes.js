@@ -14,7 +14,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// POST: Registrar un equipo nuevo
+// POST: Registrar un equipo nuevo (Manual)
 router.post("/", async (req, res) => {
   const asset = new Asset(req.body);
   try {
@@ -25,9 +25,25 @@ router.post("/", async (req, res) => {
   }
 });
 
-// 🚀 NUEVO: GET para obtener las métricas del Dashboard
+// 🚀 NUEVO: POST para Carga Masiva (Bulk)
+router.post("/bulk", async (req, res) => {
+  try {
+    const assetsData = req.body;
+
+    // Mongoose insertMany es una operación atómica y super rápida
+    const result = await Asset.insertMany(assetsData);
+
+    res.status(201).json({
+      success: true,
+      message: `${result.length} equipos insertados correctamente`,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 🚀 GET para obtener las métricas del Dashboard
 // (Ubicado aquí estratégicamente antes de los endpoints con /:id)
-// ==========================================
 router.get("/metrics", async (req, res) => {
   try {
     const metrics = await Asset.aggregate([
@@ -75,4 +91,6 @@ router.put("/:id", async (req, res) => {
   });
   res.json(updatedAsset);
 });
+
+// Única exportación al final del archivo
 module.exports = router;
