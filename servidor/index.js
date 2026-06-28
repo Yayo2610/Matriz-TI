@@ -244,24 +244,28 @@ app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
           const brand = row["Marca"]?.trim() || "";
           const model = row["Modelo"]?.trim() || "";
           const type = row["Tipo"]?.trim() || "";
-          const name = row["Nombre"]?.trim() || "";
+          const name = row["Nombre"]?.trim() || ""; // ← Este es el nombre del asignado
           const area = row["Área"]?.trim() || "";
 
+          // Validar campos obligatorios
           if (!serialNumber || !brand || !model || !type || !name || !area) {
-            console.warn("Fila incompleta omitida:", row);
+            console.warn("Fila incompleta:", row);
             return;
           }
+
+          // 👇 Lógica para asignar estado y asignación
+          const assignedTo = name && name !== "" ? name : "N/A";
+          const status = name && name !== "" ? "Asignado" : "En Stock";
+          const department = area && area !== "" ? area : "N/A";
 
           results.push({
             serialNumber,
             brand,
             model,
             type,
-            name,
-            area,
-            status: "En Stock",
-            assignedTo: "N/A",
-            department: area,
+            status, // ← Ahora dinámico
+            assignedTo, // ← El nombre del asignado
+            department,
           });
         })
         .on("end", () => resolve(results))
