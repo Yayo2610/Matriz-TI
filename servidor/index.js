@@ -303,6 +303,46 @@ app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
 });
 
 // ==========================================
+// 🗑️ ELIMINAR TODOS LOS ACTIVOS (SOLO ADMIN)
+// ==========================================
+const verificarToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Token no proporcionado" });
+  }
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",
+    );
+    req.user = decoded; // { id, role }
+    next();
+  } catch (err) {
+    return res.status(403).json({ error: "Token inválido o expirado" });
+  }
+};
+
+app.delete("/api/assets/clear", verificarToken, async (req, res) => {
+  // Solo admin puede eliminar todo
+  if (req.user.role !== "admin") {
+    return res
+      .status(403)
+      .json({ error: "No tienes permisos para esta acción" });
+  }
+
+  try {
+    const result = await Asset.deleteMany({});
+    res.json({
+      success: true,
+      message: `Se eliminaron ${result.deletedCount} activos permanentemente.`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// ==========================================
 // 🔌 CONEXIÓN Y ARRANQUE
 // ==========================================
 mongoose
