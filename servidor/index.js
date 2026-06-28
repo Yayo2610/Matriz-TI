@@ -316,7 +316,7 @@ const verificarToken = (req, res, next) => {
       token,
       process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",
     );
-    req.user = decoded; // { id, role }
+    req.user = decoded;
     next();
   } catch (err) {
     return res.status(403).json({ error: "Token inválido o expirado" });
@@ -324,13 +324,11 @@ const verificarToken = (req, res, next) => {
 };
 
 app.delete("/api/assets/clear", verificarToken, async (req, res) => {
-  // Solo admin puede eliminar todo
   if (req.user.role !== "admin") {
     return res
       .status(403)
       .json({ error: "No tienes permisos para esta acción" });
   }
-
   try {
     const result = await Asset.deleteMany({});
     res.json({
@@ -342,6 +340,7 @@ app.delete("/api/assets/clear", verificarToken, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // ==========================================
 // 🔌 CONEXIÓN Y ARRANQUE
 // ==========================================
