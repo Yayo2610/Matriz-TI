@@ -304,39 +304,11 @@ app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
 // ==========================================
 // 🗑️ ELIMINAR TODOS LOS ACTIVOS (SOLO ADMIN)
 // ==========================================
-
-// Middleware de verificación de token (debe definirse ANTES de usarlo)
-const verificarToken = (req, res, next) => {
-  console.log("🔍 [verificarToken] Iniciando verificación...");
-  const authHeader = req.headers.authorization;
-  console.log("🔍 [verificarToken] Header Authorization:", authHeader);
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.log("❌ [verificarToken] Token no proporcionado o mal formado");
-    return res.status(401).json({ error: "Token no proporcionado" });
-  }
-
-  const token = authHeader.split(" ")[1];
-  try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",
-    );
-    console.log("✅ [verificarToken] Token decodificado:", decoded);
-    req.user = decoded; // { id, role }
-    next();
-  } catch (err) {
-    console.log("❌ [verificarToken] Error al verificar token:", err.message);
-    return res.status(403).json({ error: "Token inválido o expirado" });
-  }
-};
-
-// ✅ RUTA /clear DEBE IR ANTES DE /:id
+// 📌 RUTAS ESPECÍFICAS PRIMERO
 app.delete("/api/assets/clear", verificarToken, async (req, res) => {
   console.log("🗑️ [DELETE /clear] Petición recibida");
   console.log("👤 [DELETE /clear] Usuario autenticado:", req.user);
 
-  // Solo admin puede eliminar todo
   if (req.user.role !== "admin") {
     console.log("❌ [DELETE /clear] Usuario no es admin:", req.user.role);
     return res
@@ -358,6 +330,16 @@ app.delete("/api/assets/clear", verificarToken, async (req, res) => {
   }
 });
 
+// 📌 RUTAS CON PARÁMETROS DESPUÉS
+app.delete("/api/assets/:id", async (req, res) => {
+  console.log(`🗑️ [DELETE /:id] Eliminando activo ${req.params.id}`);
+  try {
+    await Asset.findByIdAndDelete(req.params.id);
+    res.json({ message: "Activo eliminado" });
+  } catch (err) {
+    res.status(400).json({ error: "No se pudo eliminar el activo" });
+  }
+});
 // ✅ RUTA /:id DEBE IR DESPUÉS DE /clear
 app.delete("/api/assets/:id", async (req, res) => {
   try {
