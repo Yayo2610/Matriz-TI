@@ -155,41 +155,30 @@ function App() {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
+    const formData = new FormData();
+    formData.append("file", file);
 
-    reader.onload = async (event) => {
-      const text = event.target.result.replace(/\r/g, "");
-      const lines = text.split("\n").slice(1);
-      const dataToUpload = [];
+    try {
+      const response = await axios.post(`${API_URL}/bulk`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-      for (let row of lines) {
-        if (!row.trim()) continue;
-        const columns = row.split(",").map((col) => col.trim());
-        const [sn, brand, model, type, assigned, dept] = columns;
-
-        if (sn) {
-          dataToUpload.push({
-            serialNumber: sn,
-            brand: brand || "Genérico",
-            model: model || "N/A",
-            type: type || "Computadora",
-            assignedTo: assigned || "",
-            department: dept || "",
-            status: assigned ? "Asignado" : "En Stock",
-          });
-        }
-      }
-
-      try {
-        await axios.post(`${API_URL}/bulk`, dataToUpload, clientConfig);
-        alert("Carga masiva exitosa. Base de datos actualizada.");
-        fetchAssets();
-      } catch (err) {
-        alert("Error al subir el lote de datos.");
-        console.error("Detalle:", err.response?.data || err.message);
-      }
-    };
-    reader.readAsText(file);
+      alert(`✅ ${response.data.message || "Carga masiva exitosa."}`);
+      fetchAssets();
+      setActualizarMetricas((prev) => prev + 1);
+      e.target.value = ""; // Limpiar input
+    } catch (err) {
+      console.error(
+        "Error en carga masiva:",
+        err.response?.data || err.message,
+      );
+      alert(
+        `❌ Error al subir el archivo: ${err.response?.data?.error || "Revisa la consola"}`,
+      );
+    }
   };
   // 👥 PROPUESTA 2: Procesador de Importación del Directorio de Personal (Nómina en CSV)
   const handleBulkUploadEmployees = (e) => {
