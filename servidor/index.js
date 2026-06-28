@@ -6,116 +6,22 @@ const bcrypt = require("bcryptjs");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const { body, validationResult } = require("express-validator");
+const multer = require("multer"); // ✅ CORREGIDO: "multer" no "mutter"
+const csv = require("csv-parser");
+const { Readable } = require("stream");
 require("dotenv").config();
 
 const app = express();
 
-const multer = require("multer");
-const csv = require("csv-parser");
-const { Readable } = require("stream");
-
-// Configuración de multer (en memoria)
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
-
 // ==========================================
-// 📤 RUTA DE CARGA MASIVA (BULK) VÍA CSV
+// 🛡️ CONFIGURACIÓN DE HARDENING
 // ==========================================
-app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
-  try {
-    // Verificar que se haya subido un archivo
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error:
-          "No se recibió ningún archivo. Asegúrate de usar el campo 'file'.",
-      });
-    }
-
-    // Convertir el buffer a string
-    const csvString = req.file.buffer.toString("utf8");
-    const results = [];
-
-    // Crear stream y parsear CSV
-    const stream = Readable.from(csvString);
-    const parsePromise = new Promise((resolve, reject) => {
-      stream
-        .pipe(
-          csv({
-            headers: ["S/N", "Marca", "Modelo", "Tipo", "Nombre", "Área"],
-            skipLines: 0, // Cambia a 1 si la primera línea son encabezados
-          }),
-        )
-        .on("data", (row) => {
-          const serialNumber = row["S/N"]?.trim() || "";
-          const brand = row["Marca"]?.trim() || "";
-          const model = row["Modelo"]?.trim() || "";
-          const type = row["Tipo"]?.trim() || "";
-          const name = row["Nombre"]?.trim() || "";
-          const area = row["Área"]?.trim() || "";
-
-          // Validar campos obligatorios
-          if (!serialNumber || !brand || !model || !type || !name || !area) {
-            console.warn("Fila incompleta omitida:", row);
-            return;
-          }
-
-          results.push({
-            serialNumber,
-            brand,
-            model,
-            type,
-            name,
-            area,
-            status: "En Stock",
-            assignedTo: "N/A",
-            department: area,
-          });
-        })
-        .on("end", () => resolve(results))
-        .on("error", (err) => reject(err));
-    });
-
-    const assetsToInsert = await parsePromise;
-
-    if (assetsToInsert.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: "El archivo CSV no contiene datos válidos o está vacío.",
-      });
-    }
-
-    // Insertar en la base de datos (manejar duplicados)
-    const inserted = await Asset.insertMany(assetsToInsert, { ordered: false });
-
-    res.status(201).json({
-      success: true,
-      message: `${inserted.length} equipos insertados correctamente de ${assetsToInsert.length} procesados.`,
-      data: inserted,
-    });
-  } catch (error) {
-    console.error("Error en /bulk:", error);
-    if (error.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        error:
-          "Error de duplicado: algunos seriales ya existen en la base de datos.",
-        details: error.message,
-      });
-    }
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ==========================================
-// 🛡️ CONFIGURACIÓN DE HARDENING Y MITIGACIÓN (Sprint 5)
-// ==========================================
+app.set("trust proxy", 1); // ✅ Para que rate-limit funcione correctamente en Render
 app.use(helmet());
 app.disable("x-powered-by");
 app.use(cors());
 app.use(express.json());
 
-// Configuramos el Rate Limiter contra Fuerza Bruta / DoS
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -127,7 +33,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // ==========================================
-// 🛡️ MIDDLEWARES DE VALIDACIÓN (express-validator)
+// 🛡️ MIDDLEWARES DE VALIDACIÓN
 // ==========================================
 const validarActivo = [
   body("serialNumber")
@@ -149,7 +55,7 @@ const validarActivo = [
 ];
 
 // ==========================================
-// 🗄️ MODELOS DE DATOS (Mongoose) - MODIFICADO PARA S6
+// 🗄️ MODELOS DE DATOS
 // ==========================================
 const User =
   mongoose.models.Account ||
@@ -184,17 +90,17 @@ const AssetSchema = new mongoose.Schema({
 const Asset = mongoose.models.Asset || mongoose.model("Asset", AssetSchema);
 
 // ==========================================
-// 🔑 RUTAS DE AUTENTICACIÓN - MODIFICADO PARA S6
+// 🔑 RUTAS DE AUTENTICACIÓN
 // ==========================================
 app.post("/api/auth/register", async (req, res) => {
   try {
-    const { email, password, role } = req.body; // Desestructuramos email y el nuevo campo role
+    const { email, password, role } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = new User({
       email,
       password: hashedPassword,
-      role, // Guardamos el rol de forma local en la BD
+      role,
     });
 
     await user.save();
@@ -209,19 +115,15 @@ app.post("/api/auth/register", async (req, res) => {
 
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { email, password } = req.body; // Cambiado de username a email
+    const { email, password } = req.body;
     const user = await User.findOne({ email });
 
     if (user && (await bcrypt.compare(password, user.password))) {
-      // Firmamos el token inyectando el ID y el ROL del usuario (Indispensable para el futuro Sprint 7)
       const token = jwt.sign(
         { id: user._id, role: user.role },
         process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",
-        {
-          expiresIn: "8h", // Modificado a 8 horas para cubrir una jornada laboral de soporte estándar
-        },
+        { expiresIn: "8h" },
       );
-      // Respondemos con el token y el rol para que el Frontend de React pueda ocultar/mostrar vistas
       res.json({ token, role: user.role });
     } else {
       res.status(401).json({ error: "Credenciales inválidas" });
@@ -232,10 +134,8 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 // ==========================================
-// 📊 RUTAS DE ACTIVOS & MÉTRICAS (CRUD)
+// 📊 RUTAS DE ACTIVOS & MÉTRICAS
 // ==========================================
-
-// Pipeline de Agregación para el Dashboard
 app.get("/api/assets/metrics", async (req, res) => {
   try {
     const metrics = await Asset.aggregate([
@@ -270,7 +170,6 @@ app.get("/api/assets/metrics", async (req, res) => {
   }
 });
 
-// GET general de activos
 app.get("/api/assets", async (req, res) => {
   try {
     const assets = await Asset.find();
@@ -280,7 +179,6 @@ app.get("/api/assets", async (req, res) => {
   }
 });
 
-// POST con el middleware de validación inyectado
 app.post("/api/assets", validarActivo, async (req, res) => {
   try {
     const newAsset = new Asset(req.body);
@@ -314,6 +212,93 @@ app.put("/api/assets/:id", async (req, res) => {
 });
 
 // ==========================================
+// 🚀 NUEVA RUTA PARA CARGA MASIVA (CSV)
+// ==========================================
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
+app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "No se recibió ningún archivo. Asegúrate de usar el campo 'file'.",
+      });
+    }
+
+    const csvString = req.file.buffer.toString("utf8");
+    const results = [];
+    const stream = Readable.from(csvString);
+
+    const parsePromise = new Promise((resolve, reject) => {
+      stream
+        .pipe(
+          csv({
+            headers: ["S/N", "Marca", "Modelo", "Tipo", "Nombre", "Área"],
+            skipLines: 0, // Cambia a 1 si la primera fila es encabezado
+          }),
+        )
+        .on("data", (row) => {
+          const serialNumber = row["S/N"]?.trim() || "";
+          const brand = row["Marca"]?.trim() || "";
+          const model = row["Modelo"]?.trim() || "";
+          const type = row["Tipo"]?.trim() || "";
+          const name = row["Nombre"]?.trim() || "";
+          const area = row["Área"]?.trim() || "";
+
+          if (!serialNumber || !brand || !model || !type || !name || !area) {
+            console.warn("Fila incompleta omitida:", row);
+            return;
+          }
+
+          results.push({
+            serialNumber,
+            brand,
+            model,
+            type,
+            name,
+            area,
+            status: "En Stock",
+            assignedTo: "N/A",
+            department: area,
+          });
+        })
+        .on("end", () => resolve(results))
+        .on("error", (err) => reject(err));
+    });
+
+    const assetsToInsert = await parsePromise;
+
+    if (assetsToInsert.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "El archivo CSV no contiene datos válidos o está vacío.",
+      });
+    }
+
+    const inserted = await Asset.insertMany(assetsToInsert, { ordered: false });
+
+    res.status(201).json({
+      success: true,
+      message: `${inserted.length} equipos insertados correctamente de ${assetsToInsert.length} procesados.`,
+      data: inserted,
+    });
+  } catch (error) {
+    console.error("Error en /bulk:", error);
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        error:
+          "Error de duplicado: algunos seriales ya existen en la base de datos.",
+        details: error.message,
+      });
+    }
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ==========================================
 // 🔌 CONEXIÓN Y ARRANQUE
 // ==========================================
 mongoose
@@ -321,17 +306,16 @@ mongoose
   .then(() => console.log("✅ Conectado a MongoDB Atlas"))
   .catch((err) => console.error("❌ Error de conexión:", err));
 
-// Exportación para pruebas con Jest (Evita que choquen los puertos en entornos de test)
 if (process.env.NODE_ENV !== "test") {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () =>
     console.log(`🚀 Servidor AssetTrack en puerto ${PORT}`),
   );
 }
+
 app.use((req, res, next) => {
   console.log(`Petición recibida: ${req.method} ${req.url}`);
   next();
 });
-git;
 
 module.exports = app;
