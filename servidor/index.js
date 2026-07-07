@@ -186,7 +186,9 @@ app.get(
   verificarRol("admin"),
   async (req, res) => {
     try {
-      const users = await User.find().select("-password");
+      const users = await User.find({ _id: { $ne: req.user.id } }).select(
+        "-password",
+      );
       res.json(users);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -199,6 +201,11 @@ app.delete(
   verificarToken,
   verificarRol("admin"),
   async (req, res) => {
+    if (req.params.id === req.user.id) {
+      return res
+        .status(400)
+        .json({ error: "No puedes eliminar tu propia cuenta" });
+    }
     try {
       await User.findByIdAndDelete(req.params.id);
       res.json({ message: "Usuario eliminado" });
