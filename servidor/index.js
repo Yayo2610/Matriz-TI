@@ -61,6 +61,30 @@ const verificarToken = (req, res, next) => {
 };
 
 // ==========================================
+// 🔑 MIDDLEWARE DE VERIFICACIÓN DE ROL
+// ==========================================
+const verificarRol =
+  (...rolesPermitidos) =>
+  (req, res, next) => {
+    if (!rolesPermitidos.includes(req.user?.role)) {
+      return res
+        .status(403)
+        .json({ error: "No tienes permisos para esta acción" });
+    }
+    next();
+  };
+
+// ==========================================
+// 🔑 MIDDLEWARE DE VERIFICACIÓN DE PERMISOS (lectura/escritura/modificación)
+// ==========================================
+const verificarPermiso = (permiso) => (req, res, next) => {
+  if (req.user?.role === "admin" || req.user?.permisos?.[permiso]) {
+    return next();
+  }
+  return res.status(403).json({ error: "No tienes permisos para esta acción" });
+};
+
+// ==========================================
 // 🛡️ MIDDLEWARES DE VALIDACIÓN
 // ==========================================
 const validarActivo = [
@@ -98,6 +122,11 @@ const User =
           required: true,
           enum: ["admin", "tecnico", "coordinador"],
         },
+        permisos: {
+          lectura: { type: Boolean, default: true },
+          escritura: { type: Boolean, default: false },
+          modificacion: { type: Boolean, default: false },
+        },
       },
       { timestamps: true },
     ),
@@ -120,26 +149,32 @@ const Asset = mongoose.models.Asset || mongoose.model("Asset", AssetSchema);
 // ==========================================
 // 🔑 RUTAS DE AUTENTICACIÓN
 // ==========================================
-app.post("/api/auth/register", async (req, res) => {
-  try {
-    const { email, password, role } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
+app.post(
+  "/api/auth/register",
+  verificarToken,
+  verificarRol("admin"),
+  async (req, res) => {
+    try {
+      const { email, password, role, permisos } = req.body;
+      const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = new User({
-      email,
-      password: hashedPassword,
-      role,
-    });
+      const user = new User({
+        email,
+        password: hashedPassword,
+        role,
+        permisos,
+      });
 
-    await user.save();
-    res.status(201).json({ message: "Usuario creado con éxito" });
-  } catch (err) {
-    res.status(400).json({
-      error:
-        "Error al registrar usuario (el correo podría ya existir o el rol es inválido)",
-    });
-  }
-});
+      await user.save();
+      res.status(201).json({ message: "Usuario creado con éxito" });
+    } catch (err) {
+      res.status(400).json({
+        error:
+          "Error al registrar usuario (el correo podría ya existir o el rol es inválido)",
+      });
+    }
+  },
+);
 
 app.post("/api/auth/login", async (req, res) => {
   try {
@@ -148,11 +183,11 @@ app.post("/api/auth/login", async (req, res) => {
 
     if (user && (await bcrypt.compare(password, user.password))) {
       const token = jwt.sign(
-        { id: user._id, role: user.role },
+        { id: user._id, role: user.role, permisos: user.permisos },
         process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",
         { expiresIn: "8h" },
       );
-      res.json({ token, role: user.role });
+      res.json({ token, role: user.role, permisos: user.permisos });
     } else {
       res.status(401).json({ error: "Credenciales inválidas" });
     }
@@ -164,7 +199,11 @@ app.post("/api/auth/login", async (req, res) => {
 // ==========================================
 // 📊 RUTAS DE ACTIVOS & MÉTRICAS
 // ==========================================
-app.get("/api/assets/metrics", async (req, res) => {
+app.get(
+  "/api/assets/metrics",
+  verificarToken,
+  verificarPermiso("lectura"),
+  async (req, res) => {
   try {
     const metrics = await Asset.aggregate([
       {
@@ -196,39 +235,56 @@ app.get("/api/assets/metrics", async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
-});
+  },
+);
 
-app.get("/api/assets", async (req, res) => {
-  try {
-    const assets = await Asset.find();
-    res.json(assets);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+app.get(
+  "/api/assets",
+  verificarToken,
+  verificarPermiso("lectura"),
+  async (req, res) => {
+    try {
+      const assets = await Asset.find();
+      res.json(assets);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
 
-app.post("/api/assets", validarActivo, async (req, res) => {
-  try {
-    const newAsset = new Asset(req.body);
-    await newAsset.save();
-    res.status(201).json(newAsset);
-  } catch (err) {
-    res.status(400).json({ error: "Error: S/N duplicado o inválido" });
-  }
-});
+app.post(
+  "/api/assets",
+  verificarToken,
+  verificarPermiso("escritura"),
+  validarActivo,
+  async (req, res) => {
+    try {
+      const newAsset = new Asset(req.body);
+      await newAsset.save();
+      res.status(201).json(newAsset);
+    } catch (err) {
+      res.status(400).json({ error: "Error: S/N duplicado o inválido" });
+    }
+  },
+);
 
-app.put("/api/assets/:id", async (req, res) => {
-  try {
-    const updatedAsset = await Asset.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true },
-    );
-    res.json(updatedAsset);
-  } catch (err) {
-    res.status(400).json({ error: "Error al actualizar" });
-  }
-});
+app.put(
+  "/api/assets/:id",
+  verificarToken,
+  verificarPermiso("modificacion"),
+  async (req, res) => {
+    try {
+      const updatedAsset = await Asset.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        { new: true },
+      );
+      res.json(updatedAsset);
+    } catch (err) {
+      res.status(400).json({ error: "Error al actualizar" });
+    }
+  },
+);
 
 // ==========================================
 // 🚀 CARGA MASIVA (CSV)
@@ -236,7 +292,12 @@ app.put("/api/assets/:id", async (req, res) => {
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
+app.post(
+  "/api/assets/bulk",
+  verificarToken,
+  verificarPermiso("escritura"),
+  upload.single("file"),
+  async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -317,23 +378,21 @@ app.post("/api/assets/bulk", upload.single("file"), async (req, res) => {
     }
     res.status(500).json({ success: false, error: error.message });
   }
-});
+  },
+);
 
 // ==========================================
 // 🗑️ RUTAS DELETE (ORDEN CORRECTO)
 // ==========================================
 
 // ✅ PRIMERO: Ruta específica /clear (solo admin)
-app.delete("/api/assets/clear", verificarToken, async (req, res) => {
+app.delete(
+  "/api/assets/clear",
+  verificarToken,
+  verificarRol("admin"),
+  async (req, res) => {
   console.log("🗑️ [DELETE /clear] Petición recibida");
   console.log("👤 [DELETE /clear] Usuario autenticado:", req.user);
-
-  if (req.user.role !== "admin") {
-    console.log("❌ [DELETE /clear] Usuario no es admin:", req.user.role);
-    return res
-      .status(403)
-      .json({ error: "No tienes permisos para esta acción" });
-  }
 
   try {
     const result = await Asset.deleteMany({});
@@ -347,18 +406,24 @@ app.delete("/api/assets/clear", verificarToken, async (req, res) => {
     console.error("❌ [DELETE /clear] Error al eliminar:", err.message);
     res.status(500).json({ error: err.message });
   }
-});
+  },
+);
 
 // ✅ DESPUÉS: Ruta con parámetro /:id (eliminación individual)
-app.delete("/api/assets/:id", async (req, res) => {
-  console.log(`🗑️ [DELETE /:id] Eliminando activo ${req.params.id}`);
-  try {
-    await Asset.findByIdAndDelete(req.params.id);
-    res.json({ message: "Activo eliminado" });
-  } catch (err) {
-    res.status(400).json({ error: "No se pudo eliminar el activo" });
-  }
-});
+app.delete(
+  "/api/assets/:id",
+  verificarToken,
+  verificarPermiso("modificacion"),
+  async (req, res) => {
+    console.log(`🗑️ [DELETE /:id] Eliminando activo ${req.params.id}`);
+    try {
+      await Asset.findByIdAndDelete(req.params.id);
+      res.json({ message: "Activo eliminado" });
+    } catch (err) {
+      res.status(400).json({ error: "No se pudo eliminar el activo" });
+    }
+  },
+);
 
 // ==========================================
 // 🔌 CONEXIÓN Y ARRANQUE

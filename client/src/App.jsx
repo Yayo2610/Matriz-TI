@@ -27,7 +27,7 @@ import { AuthContext } from "./context/AuthContext";
 const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function App() {
-  const { token, role, login, logout } = useContext(AuthContext);
+  const { token, role, tienePermiso, login, logout } = useContext(AuthContext);
 
   // --- ESTADOS LOCALES ---
   const [assets, setAssets] = useState([]);
@@ -55,6 +55,7 @@ function App() {
   const [employeesDirectory, setEmployeesDirectory] = useState([]);
 
   const API_URL = "https://matriz-ti-backend.onrender.com/api/assets";
+  const AUTH_URL = "https://matriz-ti-backend.onrender.com/api/auth";
   const clientConfig = { headers: { Authorization: `Bearer ${token}` } };
 
   const [form, setForm] = useState({
@@ -80,6 +81,7 @@ function App() {
     apellido: "",
     email: "",
     password: "",
+    role: "tecnico",
     permisos: { lectura: true, escritura: false, modificacion: false },
   });
 
@@ -259,7 +261,7 @@ function App() {
   };
 
   // --- COMPORTAMIENTO DE USUARIOS ---
-  const handleUserSubmit = (e) => {
+  const handleUserSubmit = async (e) => {
     e.preventDefault();
     if (!userForm.email.toLowerCase().endsWith("@empresa.com")) {
       alert(
@@ -287,6 +289,7 @@ function App() {
                 nombre: userForm.nombre,
                 apellido: userForm.apellido,
                 email: userForm.email,
+                role: userForm.role,
                 permisos: arrayPermisos,
               }
             : u,
@@ -295,13 +298,33 @@ function App() {
       setIsEditingUser(false);
       setEditUserId(null);
     } else {
+      try {
+        await axios.post(
+          `${AUTH_URL}/register`,
+          {
+            email: userForm.email,
+            password: userForm.password,
+            role: userForm.role,
+            permisos: userForm.permisos,
+          },
+          clientConfig,
+        );
+      } catch (err) {
+        alert(
+          `❌ Error al crear la cuenta: ${err.response?.data?.error || "Revisa la consola"}`,
+        );
+        return;
+      }
+
       setRegisteredUsers([
         ...registeredUsers,
         {
+          // eslint-disable-next-line react-hooks/purity -- event handler, not render
           id: Date.now(),
           nombre: userForm.nombre,
           apellido: userForm.apellido,
           email: userForm.email,
+          role: userForm.role,
           permisos: arrayPermisos,
           activo: true,
         },
@@ -312,6 +335,7 @@ function App() {
       apellido: "",
       email: "",
       password: "",
+      role: "tecnico",
       permisos: { lectura: true, escritura: false, modificacion: false },
     });
   };
@@ -322,6 +346,7 @@ function App() {
       apellido: user.apellido,
       email: user.email,
       password: "Password123",
+      role: user.role || "tecnico",
       permisos: {
         lectura: user.permisos.includes("lectura"),
         escritura: user.permisos.includes("escritura"),
@@ -433,7 +458,7 @@ function App() {
                     : "Soporte",
                 );
                 localStorage.setItem("userEmail", loginCredentials.email);
-                login(res.data.token, res.data.role);
+                login(res.data.token, res.data.role, res.data.permisos);
               } catch (err) {
                 alert("Credenciales incorrectas");
               }
@@ -538,7 +563,7 @@ function App() {
             <DashboardGrid actualizarMetricas={actualizarMetricas} />
           </div>
           <main className="max-w-7xl mx-auto p-6 grid lg:grid-cols-12 gap-9">
-            {(role === "admin" || role === "tecnico") && (
+            {tienePermiso("escritura") && (
               /* --- ESTE ES EL PANEL LATERAL CON LA MEJORA VISUAL EXACTA --- */
               <aside className="lg:col-span-3">
                 <div className="bg-[#111827] p-5 rounded-3xl border border-white/5 sticky top-28 space-y-6 shadow-xl">
@@ -776,7 +801,7 @@ function App() {
             )}
 
             <section
-              className={`${role === "coordinador" ? "lg:col-span-12" : "lg:col-span-9"} bg-[#111827] rounded-3xl border border-white/5 overflow-hidden`}
+              className={`${tienePermiso("escritura") ? "lg:col-span-9" : "lg:col-span-12"} bg-[#111827] rounded-3xl border border-white/5 overflow-hidden`}
             >
               <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">
                 <h2 className="text-sm font-bold text-white uppercase tracking-widest">
@@ -887,7 +912,7 @@ function App() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <select
-                            disabled={role === "coordinador"}
+                            disabled={!tienePermiso("modificacion")}
                             value={a.status || "En Stock"}
                             onChange={(e) =>
                               handleStatusChange(a._id, e.target.value)
@@ -907,18 +932,22 @@ function App() {
                               Mantenimiento
                             </option>
                           </select>
-                          <button
-                            onClick={() => startEdit(a)}
-                            className="text-yellow-500 ml-3"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            onClick={() => deleteAsset(a._id)}
-                            className="text-red-500 ml-3"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {tienePermiso("modificacion") && (
+                            <>
+                              <button
+                                onClick={() => startEdit(a)}
+                                className="text-yellow-500 ml-3"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => deleteAsset(a._id)}
+                                className="text-red-500 ml-3"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -970,6 +999,18 @@ function App() {
                 }
                 required
               />
+
+              <select
+                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-slate-200 border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs cursor-pointer"
+                value={userForm.role}
+                onChange={(e) =>
+                  setUserForm({ ...userForm, role: e.target.value })
+                }
+              >
+                <option value="admin">Administrador</option>
+                <option value="tecnico">Técnico</option>
+                <option value="coordinador">Coordinador</option>
+              </select>
 
               <div className="relative">
                 <input
@@ -1144,6 +1185,9 @@ function App() {
                       </td>
                       <td className="px-6 py-5 text-slate-400 font-mono">
                         {u.email}
+                        <span className="block text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded uppercase font-bold tracking-widest mt-1 w-fit">
+                          {u.role}
+                        </span>
                       </td>
                       <td className="px-6 py-5">
                         <div className="flex flex-wrap gap-2">
