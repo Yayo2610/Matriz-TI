@@ -28,7 +28,8 @@ import { AuthContext } from "./context/AuthContext";
 const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function App() {
-  const { token, role, tienePermiso, login, logout } = useContext(AuthContext);
+  const { token, role, nombre, apellido, tienePermiso, login, logout } =
+    useContext(AuthContext);
 
   // --- ESTADOS LOCALES ---
   const [assets, setAssets] = useState([]);
@@ -49,6 +50,7 @@ function App() {
   const [editUserId, setEditUserId] = useState(null);
   const [registeredUsers, setRegisteredUsers] = useState([]);
   const [expandedUserId, setExpandedUserId] = useState(null);
+  const [mostrarUsuarios, setMostrarUsuarios] = useState(false);
 
   // 📥 CONSOLA DE APROVISIONAMIENTO: "manual" | "bulk-assets" | "bulk-personal"
   const [registerMode, setRegisterMode] = useState("manual");
@@ -73,10 +75,9 @@ function App() {
   const [editId, setEditId] = useState(null);
   const [actualizarMetricas, setActualizarMetricas] = useState(0);
 
-  const userNombre = localStorage.getItem("userNombre") || "Yael";
-  const userApellido = localStorage.getItem("userApellido") || "Barrera";
-  const userEmail =
-    localStorage.getItem("userEmail") || "yael.admin@empresa.com";
+  const userNombre = nombre || "Usuario";
+  const userApellido = apellido || "";
+  const userEmail = localStorage.getItem("userEmail") || "";
 
   const [userForm, setUserForm] = useState({
     nombre: "",
@@ -461,20 +462,14 @@ function App() {
                   "https://matriz-ti-backend.onrender.com/api/auth/login",
                   loginCredentials,
                 );
-                localStorage.setItem(
-                  "userNombre",
-                  loginCredentials.email === "yael.admin@empresa.com"
-                    ? "Yael"
-                    : "Operador",
-                );
-                localStorage.setItem(
-                  "userApellido",
-                  loginCredentials.email === "yael.admin@empresa.com"
-                    ? "Barrera"
-                    : "Soporte",
-                );
                 localStorage.setItem("userEmail", loginCredentials.email);
-                login(res.data.token, res.data.role, res.data.permisos);
+                login(
+                  res.data.token,
+                  res.data.role,
+                  res.data.permisos,
+                  res.data.nombre,
+                  res.data.apellido,
+                );
               } catch (err) {
                 alert("Credenciales incorrectas");
               }
@@ -982,7 +977,7 @@ function App() {
           {/* PANEL DE REGISTRO */}
           <div className="bg-[#111827] p-8 rounded-3xl border border-white/5 shadow-xl">
             <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-              <UserPlus className="text-blue-500" /> Registrar Operador
+              <UserPlus className="text-blue-500" /> Usuarios
             </h2>
             <form onSubmit={handleUserSubmit} className="space-y-4">
               <input
@@ -1015,18 +1010,6 @@ function App() {
                 }
                 required
               />
-
-              <select
-                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-slate-200 border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs cursor-pointer"
-                value={userForm.role}
-                onChange={(e) =>
-                  setUserForm({ ...userForm, role: e.target.value })
-                }
-              >
-                <option value="admin">Administrador</option>
-                <option value="tecnico">Técnico</option>
-                <option value="coordinador">Coordinador</option>
-              </select>
 
               <div className="relative">
                 <input
@@ -1129,23 +1112,33 @@ function App() {
               </div>
 
               <button className="w-full p-4 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-500 text-xs uppercase tracking-wider transition-colors mt-4">
-                Dar de Alta Cuenta
+                Registrar
               </button>
             </form>
           </div>
 
           {/* TABLA DE CUENTAS */}
           <div className="bg-[#111827] rounded-3xl border border-white/5 p-8 shadow-xl">
-            <div className="mb-8">
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                Cuentas y Permisos Activos
-              </h2>
-              <p className="text-[10px] text-slate-500 mt-1">
-                Lista perimetral seccionada de cuentas con acceso a la API en
-                producción.
-              </p>
+            <div
+              className="mb-8 flex items-center justify-between cursor-pointer"
+              onClick={() => setMostrarUsuarios(!mostrarUsuarios)}
+            >
+              <div>
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Usuarios
+                </h2>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Lista perimetral seccionada de cuentas con acceso a la API
+                  en producción.
+                </p>
+              </div>
+              <ChevronDown
+                size={18}
+                className={`text-slate-500 transition-transform ${mostrarUsuarios ? "rotate-180" : ""}`}
+              />
             </div>
 
+            {mostrarUsuarios && (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
@@ -1310,6 +1303,7 @@ function App() {
                 </p>
               )}
             </div>
+            )}
           </div>
         </main>
       )}

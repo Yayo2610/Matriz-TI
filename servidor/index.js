@@ -226,7 +226,13 @@ app.post("/api/auth/login", async (req, res) => {
         process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",
         { expiresIn: "8h" },
       );
-      res.json({ token, role: user.role, permisos: user.permisos });
+      res.json({
+        token,
+        role: user.role,
+        permisos: user.permisos,
+        nombre: user.nombre,
+        apellido: user.apellido,
+      });
     } else {
       res.status(401).json({ error: "Credenciales inválidas" });
     }
