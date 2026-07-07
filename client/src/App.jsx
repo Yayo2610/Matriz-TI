@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { Fragment, useState, useEffect, useContext } from "react";
 import axios from "axios";
 import {
   Trash2,
@@ -20,6 +20,7 @@ import {
   Upload,
   FileText,
   Contact,
+  ChevronDown,
 } from "lucide-react";
 import DashboardGrid from "./components/DashboardGrid";
 import { AuthContext } from "./context/AuthContext";
@@ -47,6 +48,7 @@ function App() {
   const [isEditingUser, setIsEditingUser] = useState(false);
   const [editUserId, setEditUserId] = useState(null);
   const [registeredUsers, setRegisteredUsers] = useState([]);
+  const [expandedUserId, setExpandedUserId] = useState(null);
 
   // 📥 CONSOLA DE APROVISIONAMIENTO: "manual" | "bulk-assets" | "bulk-personal"
   const [registerMode, setRegisterMode] = useState("manual");
@@ -1188,63 +1190,117 @@ function App() {
                     </td>
                   </tr>
 
-                  {/* USUARIOS REGISTRADOS DINÁMICAMENTE (desde el backend) */}
-                  {registeredUsers.map((u) => (
-                    <tr
-                      key={u._id}
-                      className="hover:bg-white/[0.02] transition-colors"
-                    >
-                      <td className="px-6 py-5 font-bold text-white capitalize">
-                        {u.nombre} {u.apellido}
-                      </td>
-                      <td className="px-6 py-5 text-slate-400 font-mono">
-                        {u.email}
-                        <span className="block text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded uppercase font-bold tracking-widest mt-1 w-fit">
-                          {u.role}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5">
-                        <div className="flex flex-wrap gap-2">
-                          {u.permisos?.lectura && (
-                            <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
-                              Lectura
-                            </span>
-                          )}
-                          {u.permisos?.escritura && (
-                            <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
-                              Escritura
-                            </span>
-                          )}
-                          {u.permisos?.modificacion && (
-                            <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
-                              Modificación
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <button
+                  {/* USUARIOS REGISTRADOS DINÁMICAMENTE (desde el backend) — lista plegable */}
+                  {registeredUsers.map((u) => {
+                    const expandido = expandedUserId === u._id;
+                    return (
+                      <Fragment key={u._id}>
+                        <tr
                           onClick={() =>
-                            toggleUserStatus(u._id, u.nombre, u.activo)
+                            setExpandedUserId(expandido ? null : u._id)
                           }
-                          className={`flex items-center justify-center gap-1.5 font-bold text-[10px] mx-auto transition-colors ${u.activo ? "text-emerald-400 hover:text-red-400" : "text-slate-500 hover:text-emerald-400"}`}
+                          className="hover:bg-white/[0.02] transition-colors cursor-pointer"
                         >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${u.activo ? "bg-emerald-400" : "bg-slate-500"}`}
-                          ></span>{" "}
-                          {u.activo ? "Activo" : "Suspendido"}
-                        </button>
-                      </td>
-                      <td className="px-6 py-5 text-right">
-                        <button
-                          onClick={() => deleteUser(u._id)}
-                          className="text-slate-500 hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                          <td className="px-6 py-5 font-bold text-white capitalize">
+                            <div className="flex items-center gap-2">
+                              <ChevronDown
+                                size={14}
+                                className={`text-slate-500 transition-transform ${expandido ? "rotate-180" : ""}`}
+                              />
+                              {u.nombre} {u.apellido}
+                            </div>
+                          </td>
+                          <td className="px-6 py-5 text-slate-400 font-mono">
+                            {u.email}
+                            <span className="block text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded uppercase font-bold tracking-widest mt-1 w-fit">
+                              {u.role}
+                            </span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className="flex flex-wrap gap-2">
+                              {u.permisos?.lectura && (
+                                <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
+                                  Lectura
+                                </span>
+                              )}
+                              {u.permisos?.escritura && (
+                                <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
+                                  Escritura
+                                </span>
+                              )}
+                              {u.permisos?.modificacion && (
+                                <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
+                                  Modificación
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-5 text-center">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleUserStatus(u._id, u.nombre, u.activo);
+                              }}
+                              className={`flex items-center justify-center gap-1.5 font-bold text-[10px] mx-auto transition-colors ${u.activo ? "text-emerald-400 hover:text-red-400" : "text-slate-500 hover:text-emerald-400"}`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${u.activo ? "bg-emerald-400" : "bg-slate-500"}`}
+                              ></span>{" "}
+                              {u.activo ? "Activo" : "Suspendido"}
+                            </button>
+                          </td>
+                          <td className="px-6 py-5 text-right">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteUser(u._id);
+                              }}
+                              className="text-slate-500 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                        {expandido && (
+                          <tr className="bg-[#0a0f1a]">
+                            <td colSpan={5} className="px-6 py-5">
+                              <div className="grid sm:grid-cols-3 gap-4 text-[10px]">
+                                <div>
+                                  <span className="text-slate-500 uppercase font-bold tracking-widest block mb-1">
+                                    Fecha de alta
+                                  </span>
+                                  <span className="text-slate-300">
+                                    {u.createdAt
+                                      ? new Date(u.createdAt).toLocaleString()
+                                      : "N/D"}
+                                  </span>
+                                </div>
+                                <div className="sm:col-span-2">
+                                  <span className="text-slate-500 uppercase font-bold tracking-widest block mb-1">
+                                    Detalle de permisos
+                                  </span>
+                                  <ul className="text-slate-300 space-y-0.5">
+                                    <li>
+                                      {u.permisos?.lectura ? "✅" : "❌"} Lectura
+                                      (solo leer)
+                                    </li>
+                                    <li>
+                                      {u.permisos?.escritura ? "✅" : "❌"}{" "}
+                                      Escritura (alta de nuevos activos)
+                                    </li>
+                                    <li>
+                                      {u.permisos?.modificacion ? "✅" : "❌"}{" "}
+                                      Modificación (editar y eliminar)
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
               {registeredUsers.length === 0 && (
