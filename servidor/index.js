@@ -115,6 +115,8 @@ const User =
     "Account",
     new mongoose.Schema(
       {
+        nombre: { type: String, default: "" },
+        apellido: { type: String, default: "" },
         email: { type: String, required: true, unique: true, trim: true },
         password: { type: String, required: true },
         role: {
@@ -155,10 +157,12 @@ app.post(
   verificarRol("admin"),
   async (req, res) => {
     try {
-      const { email, password, role, permisos } = req.body;
+      const { nombre, apellido, email, password, role, permisos } = req.body;
       const hashedPassword = await bcrypt.hash(password, 10);
 
       const user = new User({
+        nombre,
+        apellido,
         email,
         password: hashedPassword,
         role,
@@ -172,6 +176,34 @@ app.post(
         error:
           "Error al registrar usuario (el correo podría ya existir o el rol es inválido)",
       });
+    }
+  },
+);
+
+app.get(
+  "/api/auth/users",
+  verificarToken,
+  verificarRol("admin"),
+  async (req, res) => {
+    try {
+      const users = await User.find().select("-password");
+      res.json(users);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+
+app.delete(
+  "/api/auth/users/:id",
+  verificarToken,
+  verificarRol("admin"),
+  async (req, res) => {
+    try {
+      await User.findByIdAndDelete(req.params.id);
+      res.json({ message: "Usuario eliminado" });
+    } catch (err) {
+      res.status(400).json({ error: "No se pudo eliminar el usuario" });
     }
   },
 );

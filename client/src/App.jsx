@@ -302,6 +302,8 @@ function App() {
         await axios.post(
           `${AUTH_URL}/register`,
           {
+            nombre: userForm.nombre,
+            apellido: userForm.apellido,
             email: userForm.email,
             password: userForm.password,
             role: userForm.role,
@@ -316,19 +318,7 @@ function App() {
         return;
       }
 
-      setRegisteredUsers([
-        ...registeredUsers,
-        {
-          // eslint-disable-next-line react-hooks/purity -- event handler, not render
-          id: Date.now(),
-          nombre: userForm.nombre,
-          apellido: userForm.apellido,
-          email: userForm.email,
-          role: userForm.role,
-          permisos: arrayPermisos,
-          activo: true,
-        },
-      ]);
+      fetchUsers();
     }
     setUserForm({
       nombre: "",
@@ -366,7 +356,7 @@ function App() {
     ) {
       setRegisteredUsers(
         registeredUsers.map((u) =>
-          u.id === id ? { ...u, activo: nuevoEstado } : u,
+          u._id === id ? { ...u, activo: nuevoEstado } : u,
         ),
       );
     }
@@ -421,9 +411,33 @@ function App() {
     }
   };
 
+  const fetchUsers = async () => {
+    try {
+      const res = await axios.get(`${AUTH_URL}/users`, clientConfig);
+      setRegisteredUsers(res.data.map((u) => ({ ...u, activo: true })));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const deleteUser = async (id) => {
+    if (window.confirm("¿Confirmas eliminar esta cuenta?")) {
+      try {
+        await axios.delete(`${AUTH_URL}/users/${id}`, clientConfig);
+        fetchUsers();
+      } catch (err) {
+        alert("No se pudo eliminar la cuenta.");
+      }
+    }
+  };
+
   useEffect(() => {
     if (token) fetchAssets();
   }, [token]);
+
+  useEffect(() => {
+    if (token && role === "admin") fetchUsers();
+  }, [token, role]);
 
   if (!token) {
     return (
@@ -1174,10 +1188,10 @@ function App() {
                     </td>
                   </tr>
 
-                  {/* USUARIOS REGISTRADOS DINÁMICAMENTE */}
+                  {/* USUARIOS REGISTRADOS DINÁMICAMENTE (desde el backend) */}
                   {registeredUsers.map((u) => (
                     <tr
-                      key={u.id}
+                      key={u._id}
                       className="hover:bg-white/[0.02] transition-colors"
                     >
                       <td className="px-6 py-5 font-bold text-white capitalize">
@@ -1191,17 +1205,17 @@ function App() {
                       </td>
                       <td className="px-6 py-5">
                         <div className="flex flex-wrap gap-2">
-                          {u.permisos?.includes("lectura") && (
+                          {u.permisos?.lectura && (
                             <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
                               Lectura
                             </span>
                           )}
-                          {u.permisos?.includes("escritura") && (
+                          {u.permisos?.escritura && (
                             <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
                               Escritura
                             </span>
                           )}
-                          {u.permisos?.includes("modificacion") && (
+                          {u.permisos?.modificacion && (
                             <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
                               Modificación
                             </span>
@@ -1211,7 +1225,7 @@ function App() {
                       <td className="px-6 py-5 text-center">
                         <button
                           onClick={() =>
-                            toggleUserStatus(u.id, u.nombre, u.activo)
+                            toggleUserStatus(u._id, u.nombre, u.activo)
                           }
                           className={`flex items-center justify-center gap-1.5 font-bold text-[10px] mx-auto transition-colors ${u.activo ? "text-emerald-400 hover:text-red-400" : "text-slate-500 hover:text-emerald-400"}`}
                         >
@@ -1223,7 +1237,7 @@ function App() {
                       </td>
                       <td className="px-6 py-5 text-right">
                         <button
-                          onClick={() => deleteUser(u.id)}
+                          onClick={() => deleteUser(u._id)}
                           className="text-slate-500 hover:text-red-500 transition-colors"
                         >
                           <Trash2 size={16} />
