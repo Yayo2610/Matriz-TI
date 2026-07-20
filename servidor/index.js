@@ -129,6 +129,7 @@ const User =
           escritura: { type: Boolean, default: false },
           modificacion: { type: Boolean, default: false },
         },
+        activo: { type: Boolean, default: true },
       },
       { timestamps: true },
     ),
@@ -192,6 +193,32 @@ app.get(
       res.json(users);
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  },
+);
+
+app.put(
+  "/api/auth/users/:id",
+  verificarToken,
+  verificarRol("admin"),
+  async (req, res) => {
+    try {
+      const camposPermitidos = ["nombre", "apellido", "role", "permisos", "activo"];
+      const actualizacion = {};
+      camposPermitidos.forEach((campo) => {
+        if (req.body[campo] !== undefined) actualizacion[campo] = req.body[campo];
+      });
+      const updatedUser = await User.findByIdAndUpdate(
+        req.params.id,
+        actualizacion,
+        { new: true, runValidators: true },
+      ).select("-password");
+      if (!updatedUser) {
+        return res.status(404).json({ error: "Usuario no encontrado" });
+      }
+      res.json(updatedUser);
+    } catch (err) {
+      res.status(400).json({ error: "No se pudo actualizar el usuario" });
     }
   },
 );

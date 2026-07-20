@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
+import { AuthContext } from "../context/AuthContext";
 
 const DashboardGrid = ({ actualizarMetricas }) => {
+  const { token } = useContext(AuthContext);
   const [metrics, setMetrics] = useState({
     total: 0,
     status: { enStock: 0, asignado: 0, enMantenimiento: 0, dadoDeBaja: 0 },
@@ -8,8 +10,12 @@ const DashboardGrid = ({ actualizarMetricas }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!token) return;
+
     // Apuntando a tu backend en Render
-    fetch("https://matriz-ti-backend.onrender.com/api/assets/metrics")
+    fetch("https://matriz-ti-backend.onrender.com/api/assets/metrics", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then((res) => res.json())
       .then((resData) => {
         if (resData.success) {
@@ -21,7 +27,7 @@ const DashboardGrid = ({ actualizarMetricas }) => {
         console.error("Error cargando métricas:", err);
         setLoading(false);
       });
-  }, [actualizarMetricas]);
+  }, [actualizarMetricas, token]);
 
   if (loading)
     return (

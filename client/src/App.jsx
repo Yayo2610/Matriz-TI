@@ -272,33 +272,33 @@ function App() {
       return;
     }
     const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!passwordRegex.test(userForm.password)) {
+    if (!isEditingUser && !passwordRegex.test(userForm.password)) {
       alert(
         "⚠️ Contraseña insegura: Debe contener al menos 8 caracteres, una letra mayúscula y un número.",
       );
       return;
     }
-    const arrayPermisos = Object.keys(userForm.permisos).filter(
-      (key) => userForm.permisos[key],
-    );
-
     if (isEditingUser) {
-      setRegisteredUsers(
-        registeredUsers.map((u) =>
-          u.id === editUserId
-            ? {
-                ...u,
-                nombre: userForm.nombre,
-                apellido: userForm.apellido,
-                email: userForm.email,
-                role: userForm.role,
-                permisos: arrayPermisos,
-              }
-            : u,
-        ),
-      );
+      try {
+        await axios.put(
+          `${AUTH_URL}/users/${editUserId}`,
+          {
+            nombre: userForm.nombre,
+            apellido: userForm.apellido,
+            role: userForm.role,
+            permisos: userForm.permisos,
+          },
+          clientConfig,
+        );
+      } catch (err) {
+        alert(
+          `❌ Error al actualizar la cuenta: ${err.response?.data?.error || "Revisa la consola"}`,
+        );
+        return;
+      }
       setIsEditingUser(false);
       setEditUserId(null);
+      fetchUsers();
     } else {
       try {
         await axios.post(
@@ -337,30 +337,49 @@ function App() {
       nombre: user.nombre,
       apellido: user.apellido,
       email: user.email,
-      password: "Password123",
+      password: "",
       role: user.role || "tecnico",
       permisos: {
-        lectura: user.permisos.includes("lectura"),
-        escritura: user.permisos.includes("escritura"),
-        modificacion: user.permisos.includes("modificacion"),
+        lectura: !!user.permisos?.lectura,
+        escritura: !!user.permisos?.escritura,
+        modificacion: !!user.permisos?.modificacion,
       },
     });
-    setEditUserId(user.id);
+    setEditUserId(user._id);
     setIsEditingUser(true);
   };
 
-  const toggleUserStatus = (id, nombre, statusActual) => {
+  const cancelEditUser = () => {
+    setIsEditingUser(false);
+    setEditUserId(null);
+    setUserForm({
+      nombre: "",
+      apellido: "",
+      email: "",
+      password: "",
+      role: "tecnico",
+      permisos: { lectura: true, escritura: false, modificacion: false },
+    });
+  };
+
+  const toggleUserStatus = async (id, nombre, statusActual) => {
     const nuevoEstado = !statusActual;
     if (
-      window.confirm(
+      !window.confirm(
         nuevoEstado ? `¿Reactivar a ${nombre}?` : `¿Suspender a ${nombre}?`,
       )
     ) {
-      setRegisteredUsers(
-        registeredUsers.map((u) =>
-          u._id === id ? { ...u, activo: nuevoEstado } : u,
-        ),
+      return;
+    }
+    try {
+      await axios.put(
+        `${AUTH_URL}/users/${id}`,
+        { activo: nuevoEstado },
+        clientConfig,
       );
+      fetchUsers();
+    } catch (err) {
+      alert("No se pudo actualizar el estado de la cuenta.");
     }
   };
 
@@ -416,7 +435,7 @@ function App() {
   const fetchUsers = async () => {
     try {
       const res = await axios.get(`${AUTH_URL}/users`, clientConfig);
-      setRegisteredUsers(res.data.map((u) => ({ ...u, activo: true })));
+      setRegisteredUsers(res.data);
     } catch (error) {
       console.error(error);
     }
@@ -976,7 +995,12 @@ function App() {
           {/* PANEL DE REGISTRO */}
           <div className="bg-[#111827] p-8 rounded-3xl border border-white/5 shadow-xl">
             <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-              <UserPlus className="text-blue-500" /> Usuarios
+              {isEditingUser ? (
+                <Pencil className="text-yellow-500" />
+              ) : (
+                <UserPlus className="text-blue-500" />
+              )}
+              {isEditingUser ? "Editar Usuario" : "Usuarios"}
             </h2>
             <form onSubmit={handleUserSubmit} className="space-y-4">
               <input
@@ -1001,39 +1025,49 @@ function App() {
               />
               <input
                 type="email"
-                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs"
+                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="Correo corporativo (@empresa.com)"
                 value={userForm.email}
                 onChange={(e) =>
                   setUserForm({ ...userForm, email: e.target.value })
                 }
+                disabled={isEditingUser}
                 required
               />
+              {isEditingUser && (
+                <p className="text-[9px] text-slate-500 -mt-2 ml-1">
+                  El correo no se puede modificar desde aquí.
+                </p>
+              )}
 
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  className="w-full p-3.5 pr-11 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs"
-                  placeholder="Contraseña temporal"
-                  value={userForm.password}
-                  onChange={(e) =>
-                    setUserForm({ ...userForm, password: e.target.value })
-                  }
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
+              {!isEditingUser && (
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    className="w-full p-3.5 pr-11 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs"
+                    placeholder="Contraseña temporal"
+                    value={userForm.password}
+                    onChange={(e) =>
+                      setUserForm({ ...userForm, password: e.target.value })
+                    }
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              )}
 
-              <p className="text-[9px] text-slate-500 flex items-center gap-1.5 mt-1 ml-1">
-                <ShieldCheck size={12} /> Política: Mínimo 8 dígitos, 1
-                Mayúscula y 1 Número.
-              </p>
+              {!isEditingUser && (
+                <p className="text-[9px] text-slate-500 flex items-center gap-1.5 mt-1 ml-1">
+                  <ShieldCheck size={12} /> Política: Mínimo 8 dígitos, 1
+                  Mayúscula y 1 Número.
+                </p>
+              )}
 
               {/* MATRIZ DE PERMISOS */}
               <div className="pt-4">
@@ -1111,8 +1145,17 @@ function App() {
               </div>
 
               <button className="w-full p-4 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-500 text-xs uppercase tracking-wider transition-colors mt-4">
-                Registrar
+                {isEditingUser ? "Guardar Cambios" : "Registrar"}
               </button>
+              {isEditingUser && (
+                <button
+                  type="button"
+                  onClick={cancelEditUser}
+                  className="w-full text-xs text-slate-500 text-center block hover:text-white cursor-pointer"
+                >
+                  Cancelar edición
+                </button>
+              )}
             </form>
           </div>
 
@@ -1230,6 +1273,12 @@ function App() {
                         </button>
                       </td>
                       <td className="px-6 py-5 text-right">
+                        <button
+                          onClick={() => startEditUser(u)}
+                          className="text-slate-500 hover:text-yellow-500 transition-colors mr-3"
+                        >
+                          <Pencil size={16} />
+                        </button>
                         <button
                           onClick={() => deleteUser(u._id)}
                           className="text-slate-500 hover:text-red-500 transition-colors"
