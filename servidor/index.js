@@ -35,13 +35,10 @@ app.use(limiter);
 // ==========================================
 // 🔑 MIDDLEWARE DE VERIFICACIÓN DE TOKEN
 // ==========================================
-const verificarToken = (req, res, next) => {
-  console.log("🔍 [verificarToken] Iniciando verificación...");
+const verificarToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
-  console.log("🔍 [verificarToken] Header Authorization:", authHeader);
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.log("❌ [verificarToken] Token no proporcionado o mal formado");
     return res.status(401).json({ error: "Token no proporcionado" });
   }
 
@@ -51,11 +48,19 @@ const verificarToken = (req, res, next) => {
       token,
       process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",
     );
-    console.log("✅ [verificarToken] Token decodificado:", decoded);
+
+    // Se revisa el estado real en la base en cada petición para que una
+    // cuenta suspendida pierda el acceso de inmediato, no hasta que expire el token.
+    const cuenta = await User.findById(decoded.id).select("activo");
+    if (!cuenta || cuenta.activo === false) {
+      return res.status(403).json({
+        error: "Cuenta suspendida. Contacta a un administrador.",
+      });
+    }
+
     req.user = decoded;
     next();
   } catch (err) {
-    console.log("❌ [verificarToken] Error al verificar token:", err.message);
     return res.status(403).json({ error: "Token inválido o expirado" });
   }
 };
@@ -248,6 +253,11 @@ app.post("/api/auth/login", async (req, res) => {
     const user = await User.findOne({ email });
 
     if (user && (await bcrypt.compare(password, user.password))) {
+      if (user.activo === false) {
+        return res.status(403).json({
+          error: "Cuenta suspendida. Contacta a un administrador.",
+        });
+      }
       const token = jwt.sign(
         { id: user._id, role: user.role, permisos: user.permisos },
         process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",

@@ -489,7 +489,7 @@ function App() {
                   res.data.apellido,
                 );
               } catch (err) {
-                alert("Credenciales incorrectas");
+                alert(err.response?.data?.error || "Credenciales incorrectas");
               }
             }}
             className="space-y-4"
