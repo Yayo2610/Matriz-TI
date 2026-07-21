@@ -213,6 +213,11 @@ app.put(
       camposPermitidos.forEach((campo) => {
         if (req.body[campo] !== undefined) actualizacion[campo] = req.body[campo];
       });
+
+      if (req.body.password && req.body.password.trim() !== "") {
+        actualizacion.password = await bcrypt.hash(req.body.password, 10);
+      }
+
       const updatedUser = await User.findByIdAndUpdate(
         req.params.id,
         actualizacion,

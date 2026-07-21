@@ -21,8 +21,12 @@ import {
   FileText,
   Contact,
   ChevronDown,
+  PackageOpen,
+  Wrench,
 } from "lucide-react";
 import DashboardGrid from "./components/DashboardGrid";
+import { ToastContainer } from "./components/Toast";
+import { ConfirmModal } from "./components/ConfirmModal";
 import { AuthContext } from "./context/AuthContext";
 
 const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,16 +37,44 @@ function App() {
 
   // --- ESTADOS LOCALES ---
   const [assets, setAssets] = useState([]);
+  const [assetsLoading, setAssetsLoading] = useState(true);
   const [loginCredentials, setLoginCredentials] = useState({
     email: "",
     password: "",
   });
+  const [loginError, setLoginError] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [currentView, setCurrentView] = useState("inventario");
+
+  // 🔔 NOTIFICACIONES PROPIAS (reemplazan alert() y window.confirm())
+  const [toasts, setToasts] = useState([]);
+  const [confirmDialog, setConfirmDialog] = useState(null);
+
+  const pushToast = (message, type = "success") => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  };
+
+  const dismissToast = (id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const askConfirm = (message, onConfirm) => {
+    setConfirmDialog({ message, onConfirm });
+  };
 
   // 🔍 ESTADOS DE FILTROS (INVENTARIO)
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("Todos");
   const [filterStatus, setFilterStatus] = useState("Todos");
+
+  // 📄 PAGINACIÓN (INVENTARIO)
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_POR_PAGINA = 25;
 
   // 👥 ESTADOS DE OPERADORES Y SEGURIDAD (USUARIOS)
   const [showPassword, setShowPassword] = useState(false);
@@ -65,7 +97,7 @@ function App() {
     serialNumber: "",
     brand: "",
     model: "",
-    type: "Computadora",
+    type: "Desktop",
     typeOther: "",
     assignedTo: "",
     department: "",
@@ -106,6 +138,17 @@ function App() {
     return matchesSearch && matchesType && matchesStatus;
   });
 
+  // 📄 PÁGINA ACTUAL SOBRE EL RESULTADO YA FILTRADO
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(filteredAssets.length / ITEMS_POR_PAGINA),
+  );
+  const paginaSegura = Math.min(currentPage, totalPaginas);
+  const paginatedAssets = filteredAssets.slice(
+    (paginaSegura - 1) * ITEMS_POR_PAGINA,
+    paginaSegura * ITEMS_POR_PAGINA,
+  );
+
   // --- COMPORTAMIENTO DE ACTIVOS ---
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -140,7 +183,7 @@ function App() {
         serialNumber: "",
         brand: "",
         model: "",
-        type: "Computadora",
+        type: "Desktop",
         typeOther: "",
         assignedTo: "",
         department: "",
@@ -149,32 +192,38 @@ function App() {
       setActualizarMetricas((prev) => prev + 1);
     } catch (err) {
       console.error("Error del backend:", err.response?.data || err.message);
-      alert(
+      pushToast(
         `Error al guardar: ${err.response?.data?.message || "Revisa la consola"}`,
+        "error",
       );
     }
   };
 
-  const handleDeleteAllAssets = async () => {
-    // Confirmación con diálogo nativo
-    const confirmacion = window.confirm(
-      "⚠️ ¿Estás seguro de eliminar TODOS los activos?\n\nEsta acción es irreversible y borrará todos los equipos del inventario permanentemente.",
+  const handleDeleteAllAssets = () => {
+    askConfirm(
+      "¿Estás seguro de eliminar TODOS los activos?\n\nEsta acción es irreversible y borrará todos los equipos del inventario permanentemente.",
+      async () => {
+        try {
+          const response = await axios.delete(
+            `${API_URL}/clear`,
+            clientConfig,
+          );
+          pushToast(response.data.message, "success");
+          // Refrescar lista y métricas
+          fetchAssets();
+          setActualizarMetricas((prev) => prev + 1);
+        } catch (err) {
+          console.error(
+            "Error al eliminar todos:",
+            err.response?.data || err.message,
+          );
+          pushToast(
+            `Error: ${err.response?.data?.error || "No se pudo eliminar"}`,
+            "error",
+          );
+        }
+      },
     );
-    if (!confirmacion) return;
-
-    try {
-      const response = await axios.delete(`${API_URL}/clear`, clientConfig);
-      alert(`✅ ${response.data.message}`);
-      // Refrescar lista y métricas
-      fetchAssets();
-      setActualizarMetricas((prev) => prev + 1);
-    } catch (err) {
-      console.error(
-        "Error al eliminar todos:",
-        err.response?.data || err.message,
-      );
-      alert(`❌ Error: ${err.response?.data?.error || "No se pudo eliminar"}`);
-    }
   };
 
   const handleBulkUploadAssets = async (e) => {
@@ -192,7 +241,10 @@ function App() {
         },
       });
 
-      alert(`✅ ${response.data.message || "Carga masiva exitosa."}`);
+      pushToast(
+        response.data.message || "Carga masiva exitosa.",
+        "success",
+      );
       fetchAssets();
       setActualizarMetricas((prev) => prev + 1);
       e.target.value = ""; // Limpiar input
@@ -201,8 +253,9 @@ function App() {
         "Error en carga masiva:",
         err.response?.data || err.message,
       );
-      alert(
-        `❌ Error al subir el archivo: ${err.response?.data?.error || "Revisa la consola"}`,
+      pushToast(
+        `Error al subir el archivo: ${err.response?.data?.error || "Revisa la consola"}`,
+        "error",
       );
     }
   };
@@ -234,13 +287,15 @@ function App() {
 
       if (deptoPersonal.length > 0) {
         setEmployeesDirectory(deptoPersonal);
-        alert(
-          `👥 Directorio Sincronizado: Se precargaron ${deptoPersonal.length} colaboradores en el sistema. Los campos de asignación manual ahora están automatizados.`,
+        pushToast(
+          `Directorio sincronizado: se precargaron ${deptoPersonal.length} colaboradores en el sistema. Los campos de asignación manual ahora están automatizados.`,
+          "success",
         );
         setRegisterMode("manual");
       } else {
-        alert(
+        pushToast(
           "El archivo de personal no contiene datos estructurados válidos.",
+          "error",
         );
       }
     };
@@ -258,7 +313,7 @@ function App() {
       fetchAssets();
       setActualizarMetricas((prev) => prev + 1);
     } catch (err) {
-      alert("Error al actualizar el estado");
+      pushToast("Error al actualizar el estado", "error");
     }
   };
 
@@ -266,15 +321,19 @@ function App() {
   const handleUserSubmit = async (e) => {
     e.preventDefault();
     if (!userForm.email.toLowerCase().endsWith("@empresa.com")) {
-      alert(
-        "🚨 Error perimetral: Solo se permiten correos corporativos con dominio @empresa.com",
+      pushToast(
+        "Error perimetral: solo se permiten correos corporativos con dominio @empresa.com",
+        "error",
       );
       return;
     }
     const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!isEditingUser && !passwordRegex.test(userForm.password)) {
-      alert(
-        "⚠️ Contraseña insegura: Debe contener al menos 8 caracteres, una letra mayúscula y un número.",
+    const seEscribioPassword = userForm.password.trim() !== "";
+    const debeValidarPassword = !isEditingUser || seEscribioPassword;
+    if (debeValidarPassword && !passwordRegex.test(userForm.password)) {
+      pushToast(
+        "Contraseña insegura: debe contener al menos 8 caracteres, una letra mayúscula y un número.",
+        "error",
       );
       return;
     }
@@ -287,12 +346,14 @@ function App() {
             apellido: userForm.apellido,
             role: userForm.role,
             permisos: userForm.permisos,
+            ...(seEscribioPassword ? { password: userForm.password } : {}),
           },
           clientConfig,
         );
       } catch (err) {
-        alert(
-          `❌ Error al actualizar la cuenta: ${err.response?.data?.error || "Revisa la consola"}`,
+        pushToast(
+          `Error al actualizar la cuenta: ${err.response?.data?.error || "Revisa la consola"}`,
+          "error",
         );
         return;
       }
@@ -314,8 +375,9 @@ function App() {
           clientConfig,
         );
       } catch (err) {
-        alert(
-          `❌ Error al crear la cuenta: ${err.response?.data?.error || "Revisa la consola"}`,
+        pushToast(
+          `Error al crear la cuenta: ${err.response?.data?.error || "Revisa la consola"}`,
+          "error",
         );
         return;
       }
@@ -362,25 +424,23 @@ function App() {
     });
   };
 
-  const toggleUserStatus = async (id, nombre, statusActual) => {
+  const toggleUserStatus = (id, nombre, statusActual) => {
     const nuevoEstado = !statusActual;
-    if (
-      !window.confirm(
-        nuevoEstado ? `¿Reactivar a ${nombre}?` : `¿Suspender a ${nombre}?`,
-      )
-    ) {
-      return;
-    }
-    try {
-      await axios.put(
-        `${AUTH_URL}/users/${id}`,
-        { activo: nuevoEstado },
-        clientConfig,
-      );
-      fetchUsers();
-    } catch (err) {
-      alert("No se pudo actualizar el estado de la cuenta.");
-    }
+    askConfirm(
+      nuevoEstado ? `¿Reactivar a ${nombre}?` : `¿Suspender a ${nombre}?`,
+      async () => {
+        try {
+          await axios.put(
+            `${AUTH_URL}/users/${id}`,
+            { activo: nuevoEstado },
+            clientConfig,
+          );
+          fetchUsers();
+        } catch (err) {
+          pushToast("No se pudo actualizar el estado de la cuenta.", "error");
+        }
+      },
+    );
   };
 
   const startEdit = (asset) => {
@@ -402,7 +462,7 @@ function App() {
       serialNumber: "",
       brand: "",
       model: "",
-      type: "Computadora",
+      type: "Desktop",
       typeOther: "",
       assignedTo: "",
       department: "",
@@ -411,24 +471,27 @@ function App() {
     setEditId(null);
   };
 
-  const deleteAsset = async (id) => {
-    if (window.confirm("¿Confirmas la baja de este activo?")) {
+  const deleteAsset = (id) => {
+    askConfirm("¿Confirmas la baja de este activo?", async () => {
       try {
         await axios.delete(`${API_URL}/${id}`, clientConfig);
         fetchAssets();
         setActualizarMetricas((prev) => prev + 1);
       } catch (err) {
-        alert("No tienes permisos.");
+        pushToast("No tienes permisos.", "error");
       }
-    }
+    });
   };
 
   const fetchAssets = async () => {
+    setAssetsLoading(true);
     try {
       const res = await axios.get(API_URL, clientConfig);
       setAssets(res.data);
     } catch (error) {
       console.error(error);
+    } finally {
+      setAssetsLoading(false);
     }
   };
 
@@ -441,15 +504,15 @@ function App() {
     }
   };
 
-  const deleteUser = async (id) => {
-    if (window.confirm("¿Confirmas eliminar esta cuenta?")) {
+  const deleteUser = (id) => {
+    askConfirm("¿Confirmas eliminar esta cuenta?", async () => {
       try {
         await axios.delete(`${AUTH_URL}/users/${id}`, clientConfig);
         fetchUsers();
       } catch (err) {
-        alert("No se pudo eliminar la cuenta.");
+        pushToast("No se pudo eliminar la cuenta.", "error");
       }
-    }
+    });
   };
 
   useEffect(() => {
@@ -462,19 +525,24 @@ function App() {
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-[#0a0f1a] flex items-center justify-center p-6 text-white font-sans">
-        <div className="w-full max-w-md bg-[#111827] p-8 rounded-3xl border border-white/5 shadow-2xl">
+      <div className="min-h-screen bg-[#0a0f1a] flex items-center justify-center p-6 text-white font-sans relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(232,121,249,0.1),transparent_60%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_at_center,black_0%,transparent_70%)]" />
+        <div className="w-full max-w-md bg-[#111827] p-8 rounded-2xl border border-fuchsia-500/10 shadow-[0_0_50px_-15px_rgba(232,121,249,0.1)] relative z-10">
           <div className="flex flex-col items-center mb-8">
-            <div className="bg-blue-600/20 p-4 rounded-full mb-4">
-              <ShieldCheck size={40} className="text-blue-500" />
+            <div className="bg-fuchsia-500/20 p-4 rounded-full mb-4 shadow-[0_0_25px_-5px_rgba(232,121,249,0.25)]">
+              <ShieldCheck size={40} className="text-fuchsia-400" />
             </div>
-            <h1 className="text-2xl font-black tracking-tight">
-              ASSETTRACK <span className="text-blue-500">PRO</span>
+            <h1 className="text-2xl font-display font-black tracking-widest [text-shadow:0_0_20px_rgba(232,121,249,0.22)]">
+              ASSETTRACK{" "}
+              <span className="text-fuchsia-400">PRO</span>
             </h1>
           </div>
           <form
             onSubmit={async (e) => {
               e.preventDefault();
+              setLoginError("");
+              setIsLoggingIn(true);
               try {
                 const res = await axios.post(
                   "https://matriz-ti-backend.onrender.com/api/auth/login",
@@ -489,58 +557,104 @@ function App() {
                   res.data.apellido,
                 );
               } catch (err) {
-                alert(err.response?.data?.error || "Credenciales incorrectas");
+                setLoginError(
+                  err.response?.data?.error || "Credenciales incorrectas",
+                );
+              } finally {
+                setIsLoggingIn(false);
               }
             }}
             className="space-y-4"
           >
             <input
               type="email"
-              className="w-full p-4 bg-[#1f2937] rounded-xl outline-none text-slate-200 border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-sm"
-              placeholder="Correo electrónico local"
-              onChange={(e) =>
+              className={`w-full p-4 bg-[#1f2937] rounded-xl outline-none text-slate-200 border transition-all text-sm ${
+                loginError
+                  ? "border-red-500/60 focus:border-red-500 focus:ring-2 focus:ring-red-500/40"
+                  : "border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40"
+              }`}
+              placeholder="Correo electrónico"
+              onChange={(e) => {
+                setLoginError("");
                 setLoginCredentials({
                   ...loginCredentials,
                   email: e.target.value,
-                })
-              }
+                });
+              }}
               required
             />
-            <input
-              type="password"
-              className="w-full p-4 bg-[#1f2937] rounded-xl outline-none text-slate-200 border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-sm"
-              placeholder="Contraseña"
-              onChange={(e) =>
-                setLoginCredentials({
-                  ...loginCredentials,
-                  password: e.target.value,
-                })
-              }
-              required
-            />
-            <button className="w-full bg-blue-600 p-4 rounded-xl font-bold uppercase text-sm cursor-pointer hover:bg-blue-500 transition-colors">
-              Entrar al Sistema
+            <div className="relative">
+              <input
+                type={showLoginPassword ? "text" : "password"}
+                className={`w-full p-4 pr-12 bg-[#1f2937] rounded-xl outline-none text-slate-200 border transition-all text-sm ${
+                  loginError
+                    ? "border-red-500/60 focus:border-red-500 focus:ring-2 focus:ring-red-500/40"
+                    : "border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40"
+                }`}
+                placeholder="Contraseña"
+                onChange={(e) => {
+                  setLoginError("");
+                  setLoginCredentials({
+                    ...loginCredentials,
+                    password: e.target.value,
+                  });
+                }}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowLoginPassword(!showLoginPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+                tabIndex={-1}
+              >
+                {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {loginError && (
+              <p className="text-red-400 text-sm text-center -mt-1">
+                {loginError}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 p-4 rounded-xl font-bold uppercase text-sm cursor-pointer hover:from-fuchsia-400 hover:to-purple-500 transition-all shadow-[0_0_25px_-8px_rgba(232,121,249,0.28)] hover:shadow-[0_0_35px_-6px_rgba(232,121,249,0.32)] disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isLoggingIn ? "Verificando..." : "Entrar al Sistema"}
             </button>
           </form>
+          <p className="text-center text-slate-500 text-xs mt-6">
+            Acceso exclusivo para personal autorizado
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0f1a] text-slate-300 font-sans">
+    <div className="min-h-screen bg-[#0a0f1a] text-slate-300 font-sans relative">
+      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(232,121,249,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(232,121,249,0.035)_1px,transparent_1px)] bg-[size:44px_44px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,black_0%,transparent_75%)]" />
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      <ConfirmModal
+        dialog={confirmDialog}
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={() => {
+          confirmDialog?.onConfirm();
+          setConfirmDialog(null);
+        }}
+      />
       {/* HEADER */}
       <header className="border-b border-white/5 bg-[#111827]/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-2 rounded-lg">
+            <div className="bg-gradient-to-br from-fuchsia-500 to-purple-600 p-2 rounded-lg shadow-[0_0_20px_-6px_rgba(232,121,249,0.28)]">
               <Laptop className="text-white" size={24} />
             </div>
             <div>
               <span className="text-base font-black text-white block capitalize">
                 {userNombre} {userApellido}
               </span>
-              <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-0.5 rounded uppercase font-bold tracking-widest mt-0.5 inline-block">
+              <span className="text-[10px] bg-fuchsia-400/10 text-fuchsia-400 border border-fuchsia-400/20 px-2.5 py-0.5 rounded uppercase font-bold tracking-widest mt-0.5 inline-block">
                 {role}
               </span>
             </div>
@@ -561,7 +675,7 @@ function App() {
       <div className="max-w-7xl mx-auto px-6 mt-6 flex gap-3 overflow-x-auto py-2">
         <button
           onClick={() => setCurrentView("inventario")}
-          className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider border cursor-pointer ${currentView === "inventario" ? "bg-blue-600 text-white border-blue-500 shadow-lg" : "bg-[#111827] text-slate-400 border-white/5"}`}
+          className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider border cursor-pointer ${currentView === "inventario" ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white border-fuchsia-400 shadow-[0_0_20px_-6px_rgba(232,121,249,0.25)]" : "bg-[#111827] text-slate-400 border-white/5"}`}
         >
           Inventario
         </button>
@@ -569,13 +683,13 @@ function App() {
           <>
             <button
               onClick={() => setCurrentView("usuarios")}
-              className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider border cursor-pointer ${currentView === "usuarios" ? "bg-blue-600 text-white border-blue-500 shadow-lg" : "bg-[#111827] text-slate-400 border-white/5"}`}
+              className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider border cursor-pointer ${currentView === "usuarios" ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white border-fuchsia-400 shadow-[0_0_20px_-6px_rgba(232,121,249,0.25)]" : "bg-[#111827] text-slate-400 border-white/5"}`}
             >
               Usuarios
             </button>
             <button
               onClick={() => setCurrentView("configuraciones")}
-              className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider border cursor-pointer ${currentView === "configuraciones" ? "bg-blue-600 text-white border-blue-500 shadow-lg" : "bg-[#111827] text-slate-400 border-white/5"}`}
+              className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider border cursor-pointer ${currentView === "configuraciones" ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white border-fuchsia-400 shadow-[0_0_20px_-6px_rgba(232,121,249,0.25)]" : "bg-[#111827] text-slate-400 border-white/5"}`}
             >
               Configuraciones
             </button>
@@ -595,27 +709,27 @@ function App() {
             {tienePermiso("escritura") && (
               /* --- ESTE ES EL PANEL LATERAL CON LA MEJORA VISUAL EXACTA --- */
               <aside className="lg:col-span-3">
-                <div className="bg-[#111827] p-5 rounded-3xl border border-white/5 sticky top-28 space-y-6 shadow-xl">
+                <div className="bg-[#111827] p-5 rounded-2xl border border-white/5 sticky top-28 space-y-6 shadow-xl">
                   {/* SELECTOR DE MODO */}
                   <div className="grid grid-cols-3 gap-1 bg-[#0a0f1a] p-1 rounded-xl border border-white/5 text-[9px] font-bold text-center uppercase tracking-wider">
                     <button
                       type="button"
                       onClick={() => setRegisterMode("manual")}
-                      className={`py-2 rounded-lg cursor-pointer transition-all ${registerMode === "manual" ? "bg-blue-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                      className={`py-2 rounded-lg cursor-pointer transition-all ${registerMode === "manual" ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
                     >
                       Manual
                     </button>
                     <button
                       type="button"
                       onClick={() => setRegisterMode("bulk-assets")}
-                      className={`py-2 rounded-lg cursor-pointer transition-all ${registerMode === "bulk-assets" ? "bg-blue-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                      className={`py-2 rounded-lg cursor-pointer transition-all ${registerMode === "bulk-assets" ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
                     >
                       + Activos
                     </button>
                     <button
                       type="button"
                       onClick={() => setRegisterMode("bulk-personal")}
-                      className={`py-2 rounded-lg cursor-pointer transition-all ${registerMode === "bulk-personal" ? "bg-blue-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                      className={`py-2 rounded-lg cursor-pointer transition-all ${registerMode === "bulk-personal" ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
                     >
                       + Personal
                     </button>
@@ -630,58 +744,69 @@ function App() {
                           {isEditing ? (
                             <Pencil className="text-yellow-500" size={16} />
                           ) : (
-                            <PlusCircle className="text-blue-500" size={16} />
+                            <PlusCircle className="text-fuchsia-400" size={16} />
                           )}
                           {isEditing ? "Editar Activo" : "Registrar Activo"}
                         </h2>
-                        <input
-                          className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all uppercase text-xs placeholder-slate-500"
-                          placeholder="S/N"
-                          value={form.serialNumber}
-                          onChange={(e) =>
-                            setForm({ ...form, serialNumber: e.target.value })
-                          }
-                          required
-                        />
-                        <input
-                          className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all capitalize text-xs placeholder-slate-500"
-                          placeholder="Marca"
-                          value={form.brand}
-                          onChange={(e) =>
-                            setForm({ ...form, brand: e.target.value })
-                          }
-                          required
-                        />
-                        <input
-                          className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all uppercase text-xs placeholder-slate-500"
-                          placeholder="Modelo"
-                          value={form.model}
-                          onChange={(e) =>
-                            setForm({ ...form, model: e.target.value })
-                          }
-                          required
-                        />
-                        <select
-                          className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-slate-200 border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all cursor-pointer text-xs"
-                          value={form.type}
-                          onChange={(e) =>
-                            setForm({ ...form, type: e.target.value })
-                          }
-                        >
-                          <option value="Computadora">Computadora</option>
-                          <option value="Celular">Celular</option>
-                          <option value="Otro">Otro</option>
-                        </select>
-                        {form.type === "Otro" && (
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
+                            S/N
+                          </label>
                           <input
-                            className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs placeholder-slate-500"
-                            placeholder="Especifica"
-                            value={form.typeOther}
+                            className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all uppercase text-xs placeholder-slate-500"
+                            placeholder="S/N"
+                            value={form.serialNumber}
                             onChange={(e) =>
-                              setForm({ ...form, typeOther: e.target.value })
+                              setForm({
+                                ...form,
+                                serialNumber: e.target.value,
+                              })
                             }
+                            required
                           />
-                        )}
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
+                            Marca
+                          </label>
+                          <input
+                            className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all capitalize text-xs placeholder-slate-500"
+                            placeholder="Marca"
+                            value={form.brand}
+                            onChange={(e) =>
+                              setForm({ ...form, brand: e.target.value })
+                            }
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
+                            Modelo
+                          </label>
+                          <input
+                            className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all uppercase text-xs placeholder-slate-500"
+                            placeholder="Modelo"
+                            value={form.model}
+                            onChange={(e) =>
+                              setForm({ ...form, model: e.target.value })
+                            }
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
+                            Tipo
+                          </label>
+                          <input
+                            className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs placeholder-slate-500"
+                            placeholder="Ej. Desktop, Laptop, Router..."
+                            value={form.type}
+                            onChange={(e) =>
+                              setForm({ ...form, type: e.target.value })
+                            }
+                            required
+                          />
+                        </div>
 
                         {/* CONTROL DE ASIGNACIÓN INTERACTIVO */}
                         {employeesDirectory.length > 0 ? (
@@ -695,7 +820,7 @@ function App() {
                                   (em) => em.fullName === form.assignedTo,
                                 )?.id || ""
                               }
-                              className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-slate-200 border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs cursor-pointer"
+                              className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-slate-200 border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs cursor-pointer"
                               onChange={(e) => {
                                 const val = e.target.value;
                                 if (!val) {
@@ -739,26 +864,42 @@ function App() {
                           </div>
                         ) : (
                           <>
-                            <input
-                              className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all capitalize text-xs placeholder-slate-500"
-                              placeholder="Nombre de quien recibe"
-                              value={form.assignedTo}
-                              onChange={(e) =>
-                                setForm({ ...form, assignedTo: e.target.value })
-                              }
-                            />
-                            <input
-                              className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all uppercase text-xs placeholder-slate-500"
-                              placeholder="Área de trabajo"
-                              value={form.department}
-                              onChange={(e) =>
-                                setForm({ ...form, department: e.target.value })
-                              }
-                            />
+                            <div className="space-y-1">
+                              <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
+                                Nombre de quien recibe
+                              </label>
+                              <input
+                                className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all capitalize text-xs placeholder-slate-500"
+                                placeholder="Nombre de quien recibe"
+                                value={form.assignedTo}
+                                onChange={(e) =>
+                                  setForm({
+                                    ...form,
+                                    assignedTo: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
+                                Área de trabajo
+                              </label>
+                              <input
+                                className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all uppercase text-xs placeholder-slate-500"
+                                placeholder="Área de trabajo"
+                                value={form.department}
+                                onChange={(e) =>
+                                  setForm({
+                                    ...form,
+                                    department: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
                           </>
                         )}
 
-                        <button className="w-full p-3 rounded-xl font-bold text-white text-xs uppercase bg-blue-600 hover:bg-blue-500 transition-colors shadow-md shadow-blue-600/10 cursor-pointer">
+                        <button className="w-full p-3 rounded-xl font-bold text-white text-xs uppercase bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 transition-all shadow-[0_0_20px_-8px_rgba(232,121,249,0.28)] hover:shadow-[0_0_28px_-6px_rgba(232,121,249,0.32)] cursor-pointer">
                           Guardar Activo
                         </button>
                         {isEditing && (
@@ -774,8 +915,8 @@ function App() {
                     ) : registerMode === "bulk-assets" ? (
                       /* DROPZONE DE ACTIVOS */
                       <div className="flex flex-col items-center justify-center text-center space-y-4 h-full py-6">
-                        <div className="p-4 bg-blue-500/10 rounded-full">
-                          <FileText size={32} className="text-blue-400" />
+                        <div className="p-4 bg-fuchsia-400/10 rounded-full">
+                          <FileText size={32} className="text-fuchsia-400" />
                         </div>
                         <div>
                           <h3 className="text-sm font-bold text-white">
@@ -830,24 +971,27 @@ function App() {
             )}
 
             <section
-              className={`${tienePermiso("escritura") ? "lg:col-span-9" : "lg:col-span-12"} bg-[#111827] rounded-3xl border border-white/5 overflow-hidden`}
+              className={`${tienePermiso("escritura") ? "lg:col-span-9" : "lg:col-span-12"} bg-[#111827] rounded-2xl border border-white/5 overflow-hidden`}
             >
               <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">
-                <h2 className="text-sm font-bold text-white uppercase tracking-widest">
+                <h2 className="text-sm font-display font-bold text-white uppercase tracking-[0.15em]">
                   Inventario Actual
                 </h2>
                 <div className="flex items-center gap-4">
-                  <span className="bg-blue-500/10 text-blue-500 px-4 py-1 rounded-full text-xs font-black">
+                  <span className="bg-fuchsia-400/10 text-fuchsia-400 px-4 py-1 rounded-full text-xs font-black">
                     {filteredAssets.length} ITEMS
                   </span>
                   {role === "admin" && (
-                    <button
-                      onClick={handleDeleteAllAssets}
-                      className="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-4 py-2 rounded-xl text-xs font-bold transition-colors"
-                    >
-                      <Trash2 size={16} />
-                      Eliminar todos
-                    </button>
+                    <>
+                      <div className="w-px h-6 bg-white/10" />
+                      <button
+                        onClick={handleDeleteAllAssets}
+                        className="flex items-center gap-2 bg-transparent hover:bg-red-600/20 border border-red-500/30 text-red-400/80 hover:text-red-400 px-4 py-2 rounded-xl text-xs font-bold transition-colors"
+                      >
+                        <Trash2 size={16} />
+                        Eliminar todos
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -863,33 +1007,64 @@ function App() {
                     type="text"
                     placeholder="Buscar S/N, marca, modelo..."
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-11 pr-4 py-2.5 bg-[#1f2937] rounded-xl outline-none text-xs text-slate-200 border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all"
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full pl-11 pr-4 py-2.5 bg-[#1f2937] rounded-xl outline-none text-xs text-slate-200 border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all"
                   />
                 </div>
                 <div className="relative">
                   <select
                     value={filterType}
-                    onChange={(e) => setFilterType(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#1f2937] rounded-xl outline-none text-xs text-slate-200 border border-transparent focus:border-blue-500 cursor-pointer appearance-none"
+                    onChange={(e) => {
+                      setFilterType(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full pl-4 pr-10 py-2.5 bg-[#1f2937] rounded-xl outline-none text-xs text-slate-200 border border-transparent focus:border-fuchsia-400 cursor-pointer appearance-none"
                   >
                     <option value="Todos">Todos los tipos</option>
-                    <option value="Computadora">Computadoras</option>
+                    <option value="Desktop">Desktop</option>
+                    <option value="Laptop">Laptop</option>
                     <option value="Celular">Celulares</option>
+                    <option value="Monitor">Monitores</option>
+                    <option value="Impresora">Impresoras</option>
+                    <option value="Impresora de Etiquetas">
+                      Impresoras de Etiquetas
+                    </option>
+                    <option value="Access Point">Access Points</option>
+                    <option value="Switch">Switches</option>
+                    <option value="Router">Routers</option>
+                    <option value="Servidor">Servidores</option>
+                    <option value="ONT">ONT</option>
+                    <option value="Firewall">Firewalls</option>
+                    <option value="UPS">UPS</option>
+                    <option value="Periferico">Periféricos</option>
                     <option value="Otro">Otros Equipos</option>
                   </select>
+                  <ChevronDown
+                    size={14}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+                  />
                 </div>
                 <div className="relative">
                   <select
                     value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#1f2937] rounded-xl outline-none text-xs text-slate-200 border border-transparent focus:border-blue-500 cursor-pointer appearance-none"
+                    onChange={(e) => {
+                      setFilterStatus(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full pl-4 pr-10 py-2.5 bg-[#1f2937] rounded-xl outline-none text-xs text-slate-200 border border-transparent focus:border-fuchsia-400 cursor-pointer appearance-none"
                   >
                     <option value="Todos">Todos los estados</option>
                     <option value="En Stock">En Stock</option>
                     <option value="Asignado">Asignado</option>
                     <option value="En Mantenimiento">En Mantenimiento</option>
                   </select>
+                  <ChevronDown
+                    size={14}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+                  />
                 </div>
               </div>
 
@@ -898,19 +1073,64 @@ function App() {
                   <thead className="bg-white/2 text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">
                     <tr>
                       <th className="px-6 py-4 text-left">Hardware</th>
+                      <th className="px-6 py-4 text-left">Tipo</th>
                       <th className="px-6 py-4 text-left">Serial No.</th>
-                      <th className="px-6 py-4 text-left">Asignado a</th>
+                      <th className="px-6 py-4 text-left whitespace-nowrap">
+                        Asignado a
+                      </th>
                       <th className="px-6 py-4 text-left">Área</th>
-                      <th className="px-6 py-4 text-right">
+                      <th className="px-6 py-4 text-right whitespace-nowrap">
                         Estado y Acciones
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {filteredAssets.map((a) => (
+                    {assetsLoading ? (
+                      Array.from({ length: 8 }).map((_, idx) => (
+                        <tr key={`skeleton-${idx}`} className="animate-pulse">
+                          <td className="px-6 py-4">
+                            <div className="h-3 w-24 bg-white/10 rounded mb-2" />
+                            <div className="h-2.5 w-16 bg-white/5 rounded" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="h-5 w-16 bg-white/10 rounded-lg" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="h-3 w-20 bg-white/10 rounded" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="h-3 w-28 bg-white/10 rounded" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="h-3 w-24 bg-white/10 rounded" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="h-7 w-32 bg-white/10 rounded-xl ml-auto" />
+                          </td>
+                        </tr>
+                      ))
+                    ) : filteredAssets.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-16">
+                          <div className="flex flex-col items-center gap-3 text-center">
+                            <div className="p-4 bg-white/5 rounded-full">
+                              <PackageOpen size={28} className="text-slate-600" />
+                            </div>
+                            <p className="text-sm font-bold text-slate-400">
+                              No hay activos que coincidan
+                            </p>
+                            <p className="text-xs text-slate-600 max-w-xs">
+                              Ajusta los filtros de búsqueda o registra un
+                              nuevo equipo desde el panel izquierdo.
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedAssets.map((a, idx) => (
                       <tr
                         key={a._id}
-                        className="hover:bg-white/2 transition text-xs"
+                        className={`hover:bg-white/5 transition text-xs ${idx % 2 === 1 ? "bg-white/[0.02]" : ""}`}
                       >
                         <td className="px-6 py-4">
                           <div className="text-white font-bold capitalize">
@@ -920,7 +1140,14 @@ function App() {
                             {a.model}
                           </div>
                         </td>
-                        <td className="px-6 py-4 font-mono text-blue-400 uppercase">
+                        <td className="px-6 py-4">
+                          <span className="bg-white/5 text-slate-300 border border-white/10 px-3 py-1.5 rounded-xl text-[11px] font-bold uppercase tracking-wider">
+                            {a.type === "Otro" && a.typeOther
+                              ? a.typeOther
+                              : a.type || "Sin definir"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 font-mono text-fuchsia-400 uppercase">
                           {a.serialNumber}
                         </td>
                         <td className="px-6 py-4 text-slate-300 capitalize">
@@ -932,57 +1159,120 @@ function App() {
                             a.assignedTo || "N/A"
                           )}
                         </td>
-                        <td className="px-6 py-4 text-slate-300 uppercase">
+                        <td className="px-6 py-4 text-slate-300 uppercase max-w-[160px]">
                           {(a.status || "En Stock") === "En Stock" ? (
                             <span className="text-slate-600 italic">—</span>
                           ) : (
-                            a.department || "N/A"
+                            <span
+                              className="block truncate"
+                              title={a.department || "N/A"}
+                            >
+                              {a.department || "N/A"}
+                            </span>
                           )}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <select
-                            disabled={!tienePermiso("modificacion")}
-                            value={a.status || "En Stock"}
-                            onChange={(e) =>
-                              handleStatusChange(a._id, e.target.value)
-                            }
-                            className={`px-3 py-1.5 text-[11px] font-bold rounded-xl border outline-none cursor-pointer ${(a.status || "En Stock") === "En Stock" ? "bg-blue-600/10 text-blue-400 border-blue-500/20" : (a.status || "En Stock") === "Asignado" ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/20" : "bg-orange-600/10 text-orange-400 border-orange-500/20"}`}
-                          >
-                            <option value="En Stock" className="bg-[#1f2937]">
-                              En Stock
-                            </option>
-                            <option value="Asignado" className="bg-[#1f2937]">
-                              Asignado
-                            </option>
-                            <option
-                              value="En Mantenimiento"
-                              className="bg-[#1f2937]"
-                            >
-                              Mantenimiento
-                            </option>
-                          </select>
-                          {tienePermiso("modificacion") && (
-                            <>
-                              <button
-                                onClick={() => startEdit(a)}
-                                className="text-yellow-500 ml-3"
+                          <div className="inline-flex items-center justify-end gap-2 whitespace-nowrap">
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                {(a.status || "En Stock") === "En Stock" ? (
+                                  <PackageOpen
+                                    size={12}
+                                    className="text-blue-400"
+                                  />
+                                ) : (a.status || "En Stock") ===
+                                  "Asignado" ? (
+                                  <UserCheck
+                                    size={12}
+                                    className="text-emerald-400"
+                                  />
+                                ) : (
+                                  <Wrench
+                                    size={12}
+                                    className="text-orange-400"
+                                  />
+                                )}
+                              </span>
+                              <select
+                                disabled={!tienePermiso("modificacion")}
+                                value={a.status || "En Stock"}
+                                onChange={(e) =>
+                                  handleStatusChange(a._id, e.target.value)
+                                }
+                                className={`pl-8 pr-3 py-1.5 text-[11px] font-bold rounded-xl border outline-none cursor-pointer ${(a.status || "En Stock") === "En Stock" ? "bg-blue-600/10 text-blue-400 border-blue-500/20" : (a.status || "En Stock") === "Asignado" ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/20" : "bg-orange-600/10 text-orange-400 border-orange-500/20"}`}
                               >
-                                <Pencil size={14} />
-                              </button>
-                              <button
-                                onClick={() => deleteAsset(a._id)}
-                                className="text-red-500 ml-3"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </>
-                          )}
+                                <option
+                                  value="En Stock"
+                                  className="bg-[#1f2937]"
+                                >
+                                  En Stock
+                                </option>
+                                <option
+                                  value="Asignado"
+                                  className="bg-[#1f2937]"
+                                >
+                                  Asignado
+                                </option>
+                                <option
+                                  value="En Mantenimiento"
+                                  className="bg-[#1f2937]"
+                                >
+                                  Mantenimiento
+                                </option>
+                              </select>
+                            </div>
+                            {tienePermiso("modificacion") && (
+                              <span className="inline-flex items-center gap-1">
+                                <button
+                                  onClick={() => startEdit(a)}
+                                  className="text-yellow-500 p-1.5 rounded-lg hover:bg-yellow-500/10 transition-colors cursor-pointer"
+                                  title="Editar"
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                                <button
+                                  onClick={() => deleteAsset(a._id)}
+                                  className="text-red-500 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer"
+                                  title="Eliminar"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </span>
+                            )}
+                          </div>
                         </td>
                       </tr>
-                    ))}
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
+
+              {totalPaginas > 1 && (
+                <div className="p-4 border-t border-white/5 flex items-center justify-between text-xs">
+                  <span className="text-slate-500">
+                    Página {paginaSegura} de {totalPaginas}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={paginaSegura === 1}
+                      onClick={() => setCurrentPage(paginaSegura - 1)}
+                      className="px-3 py-1.5 rounded-lg bg-[#1f2937] text-slate-300 font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#2d3748] transition-colors cursor-pointer"
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      type="button"
+                      disabled={paginaSegura === totalPaginas}
+                      onClick={() => setCurrentPage(paginaSegura + 1)}
+                      className="px-3 py-1.5 rounded-lg bg-[#1f2937] text-slate-300 font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#2d3748] transition-colors cursor-pointer"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
           </main>
         </>
@@ -993,19 +1283,19 @@ function App() {
       {currentView === "usuarios" && (
         <main className="max-w-5xl mx-auto p-6 space-y-9">
           {/* PANEL DE REGISTRO */}
-          <div className="bg-[#111827] p-8 rounded-3xl border border-white/5 shadow-xl">
+          <div className="bg-[#111827] p-8 rounded-2xl border border-white/5 shadow-xl">
             <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
               {isEditingUser ? (
                 <Pencil className="text-yellow-500" />
               ) : (
-                <UserPlus className="text-blue-500" />
+                <UserPlus className="text-fuchsia-400" />
               )}
               {isEditingUser ? "Editar Usuario" : "Usuarios"}
             </h2>
             <form onSubmit={handleUserSubmit} className="space-y-4">
               <input
                 type="text"
-                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs"
+                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs"
                 placeholder="Nombre(S)"
                 value={userForm.nombre}
                 onChange={(e) =>
@@ -1015,7 +1305,7 @@ function App() {
               />
               <input
                 type="text"
-                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs"
+                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs"
                 placeholder="Apellido(S)"
                 value={userForm.apellido}
                 onChange={(e) =>
@@ -1025,7 +1315,7 @@ function App() {
               />
               <input
                 type="email"
-                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="Correo corporativo (@empresa.com)"
                 value={userForm.email}
                 onChange={(e) =>
@@ -1040,34 +1330,36 @@ function App() {
                 </p>
               )}
 
-              {!isEditingUser && (
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    className="w-full p-3.5 pr-11 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40 transition-all text-xs"
-                    placeholder="Contraseña temporal"
-                    value={userForm.password}
-                    onChange={(e) =>
-                      setUserForm({ ...userForm, password: e.target.value })
-                    }
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              )}
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  className="w-full p-3.5 pr-11 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs"
+                  placeholder={
+                    isEditingUser
+                      ? "Nueva contraseña (dejar en blanco para no cambiarla)"
+                      : "Contraseña temporal"
+                  }
+                  value={userForm.password}
+                  onChange={(e) =>
+                    setUserForm({ ...userForm, password: e.target.value })
+                  }
+                  required={!isEditingUser}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
 
-              {!isEditingUser && (
-                <p className="text-[9px] text-slate-500 flex items-center gap-1.5 mt-1 ml-1">
-                  <ShieldCheck size={12} /> Política: Mínimo 8 dígitos, 1
-                  Mayúscula y 1 Número.
-                </p>
-              )}
+              <p className="text-[9px] text-slate-500 flex items-center gap-1.5 mt-1 ml-1">
+                <ShieldCheck size={12} />
+                {isEditingUser
+                  ? "Si escribes una contraseña nueva, aplica la misma política: mínimo 8 dígitos, 1 Mayúscula y 1 Número."
+                  : "Política: Mínimo 8 dígitos, 1 Mayúscula y 1 Número."}
+              </p>
 
               {/* MATRIZ DE PERMISOS */}
               <div className="pt-4">
@@ -1088,7 +1380,7 @@ function App() {
                           },
                         })
                       }
-                      className="w-4 h-4 rounded-full appearance-none border-2 border-slate-600 checked:border-blue-500 checked:bg-blue-500 transition-colors cursor-pointer"
+                      className="w-4 h-4 rounded-full appearance-none border-2 border-slate-600 checked:border-fuchsia-400 checked:bg-fuchsia-400 transition-colors cursor-pointer"
                     />
                     <span className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors">
                       Lectura{" "}
@@ -1110,7 +1402,7 @@ function App() {
                           },
                         })
                       }
-                      className="w-4 h-4 rounded-full appearance-none border-2 border-slate-600 checked:border-blue-500 checked:bg-blue-500 transition-colors cursor-pointer"
+                      className="w-4 h-4 rounded-full appearance-none border-2 border-slate-600 checked:border-fuchsia-400 checked:bg-fuchsia-400 transition-colors cursor-pointer"
                     />
                     <span className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors">
                       Escritura{" "}
@@ -1132,7 +1424,7 @@ function App() {
                           },
                         })
                       }
-                      className="w-4 h-4 rounded-full appearance-none border-2 border-slate-600 checked:border-blue-500 checked:bg-blue-500 transition-colors cursor-pointer"
+                      className="w-4 h-4 rounded-full appearance-none border-2 border-slate-600 checked:border-fuchsia-400 checked:bg-fuchsia-400 transition-colors cursor-pointer"
                     />
                     <span className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors">
                       Modificación{" "}
@@ -1144,7 +1436,7 @@ function App() {
                 </div>
               </div>
 
-              <button className="w-full p-4 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-500 text-xs uppercase tracking-wider transition-colors mt-4">
+              <button className="w-full p-4 rounded-xl font-bold text-white bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 text-xs uppercase tracking-wider transition-all shadow-[0_0_20px_-8px_rgba(232,121,249,0.28)] hover:shadow-[0_0_28px_-6px_rgba(232,121,249,0.32)] mt-4">
                 {isEditingUser ? "Guardar Cambios" : "Registrar"}
               </button>
               {isEditingUser && (
@@ -1160,7 +1452,7 @@ function App() {
           </div>
 
           {/* TABLA DE CUENTAS */}
-          <div className="bg-[#111827] rounded-3xl border border-white/5 p-8 shadow-xl">
+          <div className="bg-[#111827] rounded-2xl border border-white/5 p-8 shadow-xl">
             <div
               className="mb-8 flex items-center justify-between cursor-pointer"
               onClick={() => setMostrarUsuarios(!mostrarUsuarios)}
@@ -1203,7 +1495,7 @@ function App() {
                     </td>
                     <td className="px-6 py-5">
                       <div className="flex gap-2">
-                        <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
+                        <span className="bg-fuchsia-400/10 text-fuchsia-400 border border-fuchsia-400/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
                           Lectura
                         </span>
                         <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
@@ -1236,14 +1528,14 @@ function App() {
                       </td>
                       <td className="px-6 py-5 text-slate-400 font-mono">
                         {u.email}
-                        <span className="block text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded uppercase font-bold tracking-widest mt-1 w-fit">
+                        <span className="block text-[9px] bg-fuchsia-400/10 text-fuchsia-400 border border-fuchsia-400/20 px-2 py-0.5 rounded uppercase font-bold tracking-widest mt-1 w-fit">
                           {u.role}
                         </span>
                       </td>
                       <td className="px-6 py-5">
                         <div className="flex flex-wrap gap-2">
                           {u.permisos?.lectura && (
-                            <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
+                            <span className="bg-fuchsia-400/10 text-fuchsia-400 border border-fuchsia-400/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
                               Lectura
                             </span>
                           )}
@@ -1304,9 +1596,9 @@ function App() {
       {/* CONFIGURACIONES ORIGINAL INTACTA */}
       {currentView === "configuraciones" && (
         <main className="max-w-5xl mx-auto p-6">
-          <div className="bg-[#111827] rounded-3xl border border-white/5 p-8 space-y-6 shadow-xl">
+          <div className="bg-[#111827] rounded-2xl border border-white/5 p-8 space-y-6 shadow-xl">
             <h2 className="text-xl font-black text-white flex items-center gap-2">
-              <Settings className="text-blue-500" /> Configuración Global
+              <Settings className="text-fuchsia-400" /> Configuración Global
             </h2>
             <div className="grid md:grid-cols-2 gap-6">
               <div className="p-6 bg-[#1f2937]/30 rounded-2xl border border-white/5">
