@@ -30,6 +30,11 @@ router.post("/", async (req, res) => {
     const newAsset = await asset.save();
     res.status(201).json(newAsset);
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(409).json({
+        message: `Ya existe un activo registrado con el número de serie "${req.body.serialNumber}".`,
+      });
+    }
     res.status(400).json({ message: err.message });
   }
 });
@@ -213,6 +218,11 @@ router.put("/:id", async (req, res) => {
     }
     res.json(updatedAsset);
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(409).json({
+        message: `Ya existe un activo registrado con el número de serie "${req.body.serialNumber}".`,
+      });
+    }
     res.status(400).json({ message: err.message });
   }
 });

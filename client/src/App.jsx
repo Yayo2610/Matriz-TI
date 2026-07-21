@@ -149,9 +149,27 @@ function App() {
     paginaSegura * ITEMS_POR_PAGINA,
   );
 
+  // 🔁 Detección de S/N duplicado contra el inventario ya cargado
+  const isDuplicateSerial =
+    form.serialNumber.trim() !== "" &&
+    assets.some(
+      (a) =>
+        a._id !== editId &&
+        a.serialNumber.trim().toLowerCase() ===
+          form.serialNumber.trim().toLowerCase(),
+    );
+
   // --- COMPORTAMIENTO DE ACTIVOS ---
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (isDuplicateSerial) {
+      pushToast(
+        `Ya existe un activo con el número de serie "${form.serialNumber}".`,
+        "error",
+      );
+      return;
+    }
 
     // 1. Forzamos el cálculo estricto del estado
     const estadoReal =
@@ -753,7 +771,11 @@ function App() {
                             S/N
                           </label>
                           <input
-                            className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all uppercase text-xs placeholder-slate-500"
+                            className={`w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border transition-all uppercase text-xs placeholder-slate-500 ${
+                              isDuplicateSerial
+                                ? "border-red-500/60 focus:border-red-500 focus:ring-2 focus:ring-red-500/40"
+                                : "border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40"
+                            }`}
                             placeholder="S/N"
                             value={form.serialNumber}
                             onChange={(e) =>
@@ -764,6 +786,11 @@ function App() {
                             }
                             required
                           />
+                          {isDuplicateSerial && (
+                            <p className="text-[10px] text-red-400 px-1">
+                              Ya existe un activo con este número de serie.
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
@@ -899,7 +926,11 @@ function App() {
                           </>
                         )}
 
-                        <button className="w-full p-3 rounded-xl font-bold text-white text-xs uppercase bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 transition-all shadow-[0_0_20px_-8px_rgba(232,121,249,0.28)] hover:shadow-[0_0_28px_-6px_rgba(232,121,249,0.32)] cursor-pointer">
+                        <button
+                          type="submit"
+                          disabled={isDuplicateSerial}
+                          className="w-full p-3 rounded-xl font-bold text-white text-xs uppercase bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 transition-all shadow-[0_0_20px_-8px_rgba(232,121,249,0.28)] hover:shadow-[0_0_28px_-6px_rgba(232,121,249,0.32)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                        >
                           Guardar Activo
                         </button>
                         {isEditing && (
