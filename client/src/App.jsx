@@ -23,6 +23,8 @@ import {
   ChevronDown,
   PackageOpen,
   Wrench,
+  KeyRound,
+  ArrowLeft,
 } from "lucide-react";
 import DashboardGrid from "./components/DashboardGrid";
 import { ToastContainer } from "./components/Toast";
@@ -46,6 +48,18 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [currentView, setCurrentView] = useState("inventario");
+
+  // 🔑 RECUPERACIÓN DE CONTRASEÑA
+  const [authView, setAuthView] = useState("login"); // "login" | "forgot"
+  const [forgotForm, setForgotForm] = useState({
+    email: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [forgotError, setForgotError] = useState("");
+  const [forgotSuccess, setForgotSuccess] = useState("");
+  const [isSendingForgot, setIsSendingForgot] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   // 🔔 NOTIFICACIONES PROPIAS (reemplazan alert() y window.confirm())
   const [toasts, setToasts] = useState([]);
@@ -338,13 +352,6 @@ function App() {
   // --- COMPORTAMIENTO DE USUARIOS ---
   const handleUserSubmit = async (e) => {
     e.preventDefault();
-    if (!userForm.email.toLowerCase().endsWith("@empresa.com")) {
-      pushToast(
-        "Error perimetral: solo se permiten correos corporativos con dominio @empresa.com",
-        "error",
-      );
-      return;
-    }
     const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
     const seEscribioPassword = userForm.password.trim() !== "";
     const debeValidarPassword = !isEditingUser || seEscribioPassword;
@@ -533,6 +540,42 @@ function App() {
     });
   };
 
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setForgotError("");
+    setForgotSuccess("");
+
+    if (forgotForm.newPassword !== forgotForm.confirmPassword) {
+      setForgotError("Las contraseñas no coinciden");
+      return;
+    }
+
+    setIsSendingForgot(true);
+    try {
+      const res = await axios.post(`${AUTH_URL}/forgot-password`, {
+        email: forgotForm.email,
+        newPassword: forgotForm.newPassword,
+      });
+      setForgotSuccess(
+        res.data.message || "Contraseña actualizada correctamente",
+      );
+      setForgotForm({ email: "", newPassword: "", confirmPassword: "" });
+    } catch (err) {
+      setForgotError(
+        err.response?.data?.error || "No se pudo restablecer la contraseña",
+      );
+    } finally {
+      setIsSendingForgot(false);
+    }
+  };
+
+  const volverALogin = () => {
+    setAuthView("login");
+    setForgotError("");
+    setForgotSuccess("");
+    setForgotForm({ email: "", newPassword: "", confirmPassword: "" });
+  };
+
   useEffect(() => {
     if (token) fetchAssets();
   }, [token]);
@@ -549,101 +592,227 @@ function App() {
         <div className="w-full max-w-md bg-[#111827] p-8 rounded-2xl border border-fuchsia-500/10 shadow-[0_0_50px_-15px_rgba(232,121,249,0.1)] relative z-10">
           <div className="flex flex-col items-center mb-8">
             <div className="bg-fuchsia-500/20 p-4 rounded-full mb-4 shadow-[0_0_25px_-5px_rgba(232,121,249,0.25)]">
-              <ShieldCheck size={40} className="text-fuchsia-400" />
+              {authView === "login" ? (
+                <ShieldCheck size={40} className="text-fuchsia-400" />
+              ) : (
+                <KeyRound size={40} className="text-fuchsia-400" />
+              )}
             </div>
             <h1 className="text-2xl font-display font-black tracking-widest [text-shadow:0_0_20px_rgba(232,121,249,0.22)]">
               ASSETTRACK{" "}
               <span className="text-fuchsia-400">PRO</span>
             </h1>
+            {authView === "forgot" && (
+              <p className="mt-2 text-xs text-slate-500 text-center">
+                Recuperación de contraseña
+              </p>
+            )}
           </div>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setLoginError("");
-              setIsLoggingIn(true);
-              try {
-                const res = await axios.post(
-                  "https://matriz-ti-backend.onrender.com/api/auth/login",
-                  loginCredentials,
-                );
-                localStorage.setItem("userEmail", loginCredentials.email);
-                login(
-                  res.data.token,
-                  res.data.role,
-                  res.data.permisos,
-                  res.data.nombre,
-                  res.data.apellido,
-                );
-              } catch (err) {
-                setLoginError(
-                  err.response?.data?.error || "Credenciales incorrectas",
-                );
-              } finally {
-                setIsLoggingIn(false);
-              }
-            }}
-            className="space-y-4"
-          >
-            <input
-              type="email"
-              className={`w-full p-4 bg-[#1f2937] rounded-xl outline-none text-slate-200 border transition-all text-sm ${
-                loginError
-                  ? "border-red-500/60 focus:border-red-500 focus:ring-2 focus:ring-red-500/40"
-                  : "border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40"
-              }`}
-              placeholder="Correo electrónico"
-              onChange={(e) => {
-                setLoginError("");
-                setLoginCredentials({
-                  ...loginCredentials,
-                  email: e.target.value,
-                });
-              }}
-              required
-            />
-            <div className="relative">
+
+          {authView === "login" ? (
+            <>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setLoginError("");
+                  setIsLoggingIn(true);
+                  try {
+                    const res = await axios.post(
+                      "https://matriz-ti-backend.onrender.com/api/auth/login",
+                      loginCredentials,
+                    );
+                    localStorage.setItem("userEmail", loginCredentials.email);
+                    login(
+                      res.data.token,
+                      res.data.role,
+                      res.data.permisos,
+                      res.data.nombre,
+                      res.data.apellido,
+                    );
+                  } catch (err) {
+                    setLoginError(
+                      err.response?.data?.error || "Credenciales incorrectas",
+                    );
+                  } finally {
+                    setIsLoggingIn(false);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <input
+                  type="email"
+                  className={`w-full p-4 bg-[#1f2937] rounded-xl outline-none text-slate-200 border transition-all text-sm ${
+                    loginError
+                      ? "border-red-500/60 focus:border-red-500 focus:ring-2 focus:ring-red-500/40"
+                      : "border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40"
+                  }`}
+                  placeholder="Correo electrónico"
+                  value={loginCredentials.email}
+                  onChange={(e) => {
+                    setLoginError("");
+                    setLoginCredentials({
+                      ...loginCredentials,
+                      email: e.target.value,
+                    });
+                  }}
+                  required
+                />
+                <div className="relative">
+                  <input
+                    type={showLoginPassword ? "text" : "password"}
+                    className={`w-full p-4 pr-12 bg-[#1f2937] rounded-xl outline-none text-slate-200 border transition-all text-sm ${
+                      loginError
+                        ? "border-red-500/60 focus:border-red-500 focus:ring-2 focus:ring-red-500/40"
+                        : "border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40"
+                    }`}
+                    placeholder="Contraseña"
+                    value={loginCredentials.password}
+                    onChange={(e) => {
+                      setLoginError("");
+                      setLoginCredentials({
+                        ...loginCredentials,
+                        password: e.target.value,
+                      });
+                    }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword(!showLoginPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+                    tabIndex={-1}
+                  >
+                    {showLoginPassword ? (
+                      <EyeOff size={16} />
+                    ) : (
+                      <Eye size={16} />
+                    )}
+                  </button>
+                </div>
+                {loginError && (
+                  <p className="text-red-400 text-sm text-center -mt-1">
+                    {loginError}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className="w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 p-4 rounded-xl font-bold uppercase text-sm cursor-pointer hover:from-fuchsia-400 hover:to-purple-500 transition-all shadow-[0_0_25px_-8px_rgba(232,121,249,0.28)] hover:shadow-[0_0_35px_-6px_rgba(232,121,249,0.32)] disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isLoggingIn ? "Verificando..." : "Entrar al Sistema"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthView("forgot");
+                    setLoginError("");
+                  }}
+                  className="w-full text-center text-xs text-fuchsia-400 hover:text-fuchsia-300 font-semibold cursor-pointer transition-colors"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </form>
+              <p className="text-center text-slate-500 text-xs mt-6">
+                Acceso exclusivo para personal autorizado
+              </p>
+            </>
+          ) : (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
               <input
-                type={showLoginPassword ? "text" : "password"}
-                className={`w-full p-4 pr-12 bg-[#1f2937] rounded-xl outline-none text-slate-200 border transition-all text-sm ${
-                  loginError
+                type="email"
+                className={`w-full p-4 bg-[#1f2937] rounded-xl outline-none text-slate-200 border transition-all text-sm ${
+                  forgotError
                     ? "border-red-500/60 focus:border-red-500 focus:ring-2 focus:ring-red-500/40"
                     : "border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40"
                 }`}
-                placeholder="Contraseña"
+                placeholder="Correo empresarial"
+                value={forgotForm.email}
                 onChange={(e) => {
-                  setLoginError("");
-                  setLoginCredentials({
-                    ...loginCredentials,
-                    password: e.target.value,
+                  setForgotError("");
+                  setForgotForm({ ...forgotForm, email: e.target.value });
+                }}
+                required
+              />
+              <div className="relative">
+                <input
+                  type={showForgotPassword ? "text" : "password"}
+                  className={`w-full p-4 pr-12 bg-[#1f2937] rounded-xl outline-none text-slate-200 border transition-all text-sm ${
+                    forgotError
+                      ? "border-red-500/60 focus:border-red-500 focus:ring-2 focus:ring-red-500/40"
+                      : "border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40"
+                  }`}
+                  placeholder="Nueva contraseña"
+                  value={forgotForm.newPassword}
+                  onChange={(e) => {
+                    setForgotError("");
+                    setForgotForm({
+                      ...forgotForm,
+                      newPassword: e.target.value,
+                    });
+                  }}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(!showForgotPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+                  tabIndex={-1}
+                >
+                  {showForgotPassword ? (
+                    <EyeOff size={16} />
+                  ) : (
+                    <Eye size={16} />
+                  )}
+                </button>
+              </div>
+              <input
+                type={showForgotPassword ? "text" : "password"}
+                className={`w-full p-4 bg-[#1f2937] rounded-xl outline-none text-slate-200 border transition-all text-sm ${
+                  forgotError
+                    ? "border-red-500/60 focus:border-red-500 focus:ring-2 focus:ring-red-500/40"
+                    : "border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40"
+                }`}
+                placeholder="Confirmar nueva contraseña"
+                value={forgotForm.confirmPassword}
+                onChange={(e) => {
+                  setForgotError("");
+                  setForgotForm({
+                    ...forgotForm,
+                    confirmPassword: e.target.value,
                   });
                 }}
                 required
               />
+              <p className="text-[10px] text-slate-500 -mt-1 px-1">
+                Mínimo 8 caracteres, una mayúscula y un número.
+              </p>
+              {forgotError && (
+                <p className="text-red-400 text-sm text-center -mt-1">
+                  {forgotError}
+                </p>
+              )}
+              {forgotSuccess && (
+                <p className="text-emerald-400 text-sm text-center -mt-1">
+                  {forgotSuccess}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={isSendingForgot}
+                className="w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 p-4 rounded-xl font-bold uppercase text-sm cursor-pointer hover:from-fuchsia-400 hover:to-purple-500 transition-all shadow-[0_0_25px_-8px_rgba(232,121,249,0.28)] hover:shadow-[0_0_35px_-6px_rgba(232,121,249,0.32)] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isSendingForgot ? "Actualizando..." : "Restablecer contraseña"}
+              </button>
               <button
                 type="button"
-                onClick={() => setShowLoginPassword(!showLoginPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
-                tabIndex={-1}
+                onClick={volverALogin}
+                className="w-full flex items-center justify-center gap-1.5 text-center text-xs text-slate-500 hover:text-slate-300 font-semibold cursor-pointer transition-colors"
               >
-                {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                <ArrowLeft size={14} />
+                Volver a iniciar sesión
               </button>
-            </div>
-            {loginError && (
-              <p className="text-red-400 text-sm text-center -mt-1">
-                {loginError}
-              </p>
-            )}
-            <button
-              type="submit"
-              disabled={isLoggingIn}
-              className="w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 p-4 rounded-xl font-bold uppercase text-sm cursor-pointer hover:from-fuchsia-400 hover:to-purple-500 transition-all shadow-[0_0_25px_-8px_rgba(232,121,249,0.28)] hover:shadow-[0_0_35px_-6px_rgba(232,121,249,0.32)] disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {isLoggingIn ? "Verificando..." : "Entrar al Sistema"}
-            </button>
-          </form>
-          <p className="text-center text-slate-500 text-xs mt-6">
-            Acceso exclusivo para personal autorizado
-          </p>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -1347,7 +1516,7 @@ function App() {
               <input
                 type="email"
                 className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="Correo corporativo (@empresa.com)"
+                placeholder="Correo electrónico"
                 value={userForm.email}
                 onChange={(e) =>
                   setUserForm({ ...userForm, email: e.target.value })

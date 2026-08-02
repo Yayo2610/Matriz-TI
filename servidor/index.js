@@ -283,6 +283,40 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+app.post("/api/auth/forgot-password", async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      return res
+        .status(400)
+        .json({ error: "El correo y la nueva contraseña son obligatorios" });
+    }
+
+    const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      return res.status(400).json({
+        error:
+          "La contraseña debe tener al menos 8 caracteres, una mayúscula y un número.",
+      });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ error: "No existe ninguna cuenta con ese correo" });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    res.json({ message: "Contraseña actualizada correctamente" });
+  } catch (err) {
+    res.status(500).json({ error: "Error en el servidor" });
+  }
+});
+
 // ==========================================
 // 📊 RUTAS DE ACTIVOS & MÉTRICAS
 // ==========================================
