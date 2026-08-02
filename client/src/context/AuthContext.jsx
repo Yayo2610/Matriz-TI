@@ -1,8 +1,10 @@
-import { createContext, useState } from "react";
+import { createContext, useState, useEffect, useRef, useCallback } from "react";
 
 export const AuthContext = createContext();
 
 const permisosPorDefecto = { lectura: false, escritura: false, modificacion: false };
+const LIMITE_INACTIVIDAD_MS = 10 * 60 * 1000; // 10 minutos
+const EVENTOS_ACTIVIDAD = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
 
 const leerPermisos = () => {
   try {
@@ -40,14 +42,44 @@ export const AuthProvider = ({ children }) => {
     setApellido(userApellido);
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.clear();
     setToken(null);
     setRole(null);
     setPermisos(permisosPorDefecto);
     setNombre("");
     setApellido("");
-  };
+  }, []);
+
+  // 🕒 CIERRE DE SESIÓN AUTOMÁTICO POR INACTIVIDAD
+  const temporizadorInactividad = useRef(null);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const reiniciarTemporizador = () => {
+      if (temporizadorInactividad.current) {
+        clearTimeout(temporizadorInactividad.current);
+      }
+      temporizadorInactividad.current = setTimeout(() => {
+        logout();
+      }, LIMITE_INACTIVIDAD_MS);
+    };
+
+    EVENTOS_ACTIVIDAD.forEach((evento) =>
+      window.addEventListener(evento, reiniciarTemporizador),
+    );
+    reiniciarTemporizador();
+
+    return () => {
+      EVENTOS_ACTIVIDAD.forEach((evento) =>
+        window.removeEventListener(evento, reiniciarTemporizador),
+      );
+      if (temporizadorInactividad.current) {
+        clearTimeout(temporizadorInactividad.current);
+      }
+    };
+  }, [token, logout]);
 
   const tienePermiso = (permiso) => role === "admin" || !!permisos[permiso];
 
