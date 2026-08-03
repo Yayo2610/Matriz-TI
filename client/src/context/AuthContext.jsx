@@ -56,7 +56,10 @@ export const AuthProvider = ({ children }) => {
     setSolicitudSesion(null);
   };
 
-  const logout = useCallback(() => {
+  // Limpia solo el estado local (para cuando el token ya se sabe inválido,
+  // p. ej. el interceptor de abajo, o cuando ya se avisó al servidor por
+  // otro camino, p. ej. al aprobar una solicitud de sesión).
+  const limpiarSesionLocal = useCallback(() => {
     localStorage.clear();
     setToken(null);
     setRole(null);
@@ -65,6 +68,23 @@ export const AuthProvider = ({ children }) => {
     setApellido("");
     setSolicitudSesion(null);
   }, []);
+
+  // Cierre de sesión "completo": avisa al servidor para liberar el
+  // sessionId (si no, un login posterior quedaría pidiendo confirmación a
+  // una sesión que ya nadie va a responder) y luego limpia el estado local.
+  const logout = useCallback(() => {
+    const currentToken = localStorage.getItem("token");
+    if (currentToken) {
+      axios
+        .post(
+          `${AUTH_URL}/logout`,
+          {},
+          { headers: { Authorization: `Bearer ${currentToken}` } },
+        )
+        .catch(() => {});
+    }
+    limpiarSesionLocal();
+  }, [limpiarSesionLocal]);
 
   const limpiarSesionExpirada = useCallback(() => {
     setSesionExpirada(false);
@@ -90,19 +110,19 @@ export const AuthProvider = ({ children }) => {
         const mensaje = (error.response?.data?.error || "").toLowerCase();
         if ((status === 401 || status === 403) && mensaje.includes("suspendida")) {
           setCuentaSuspendida(true);
-          logout();
+          limpiarSesionLocal();
         } else if (
           (status === 401 || status === 403) &&
           mensaje.includes("otro dispositivo")
         ) {
           setSesionCerradaOtroDispositivo(true);
-          logout();
+          limpiarSesionLocal();
         }
         return Promise.reject(error);
       },
     );
     return () => axios.interceptors.response.eject(interceptorId);
-  }, [logout]);
+  }, [limpiarSesionLocal]);
 
   const responderSolicitudSesion = useCallback(
     async (aprobar) => {
@@ -118,10 +138,12 @@ export const AuthProvider = ({ children }) => {
       }
       setSolicitudSesion(null);
       if (aprobar) {
-        logout();
+        // El servidor ya movió el sessionId a la otra sesión: este token
+        // queda obsoleto de inmediato, no hace falta avisarle al servidor.
+        limpiarSesionLocal();
       }
     },
-    [token, logout],
+    [token, limpiarSesionLocal],
   );
 
   // Sesión única: revisa si otro dispositivo está pidiendo iniciar sesión

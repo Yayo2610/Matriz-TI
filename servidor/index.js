@@ -170,6 +170,12 @@ const User =
         // sesión ya activa no reemplaza este valor directamente — primero
         // pasa por pendingSession, a la espera de confirmación del otro lado.
         sessionId: { type: String, default: null },
+        // Última vez que el dispositivo con la sesión activa dio señales de
+        // vida (se actualiza en cada poll de /solicitud-sesion). Si pasa
+        // demasiado tiempo sin actualizarse, se asume que esa sesión ya no
+        // existe (pestaña cerrada, sin conexión) y un login nuevo no pide
+        // confirmación — la reemplaza directo.
+        sessionLastSeen: { type: Date, default: null },
         pendingSession: {
           requestId: { type: String, default: null },
           creadoEn: { type: Date, default: null },
@@ -304,6 +310,7 @@ const firmarToken = (user, sessionId) =>
   );
 
 const EXPIRACION_SOLICITUD_MS = 2 * 60 * 1000; // 2 minutos
+const ABANDONO_SESION_MS = 20 * 1000; // sin heartbeat en 20s = pestaña cerrada/sin conexión
 
 app.post("/api/auth/login", async (req, res) => {
   try {
@@ -317,9 +324,17 @@ app.post("/api/auth/login", async (req, res) => {
         });
       }
 
-      // Sesión única: si ya hay una sesión activa, no se reemplaza directo —
-      // se crea una solicitud pendiente que el otro dispositivo debe aceptar.
-      if (user.sessionId) {
+      // Sesión única: si ya hay una sesión activa Y sigue dando señales de
+      // vida, no se reemplaza directo — se crea una solicitud pendiente que
+      // el otro dispositivo debe aceptar. Si esa sesión lleva demasiado
+      // tiempo sin heartbeat (pestaña cerrada, token expirado, sin conexión),
+      // se considera abandonada y el login nuevo pasa directo, sin preguntar.
+      const ultimoVisto = user.sessionLastSeen
+        ? new Date(user.sessionLastSeen).getTime()
+        : 0;
+      const sesionAbandonada = Date.now() - ultimoVisto > ABANDONO_SESION_MS;
+
+      if (user.sessionId && !sesionAbandonada) {
         const requestId = crypto.randomUUID();
         user.pendingSession = {
           requestId,
@@ -332,6 +347,8 @@ app.post("/api/auth/login", async (req, res) => {
 
       const sessionId = crypto.randomUUID();
       user.sessionId = sessionId;
+      user.sessionLastSeen = new Date();
+      user.pendingSession = { requestId: null, creadoEn: null, estado: null };
       await user.save();
 
       res.json({
@@ -347,6 +364,17 @@ app.post("/api/auth/login", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: "Error en el servidor" });
   }
+});
+
+// Cierre de sesión explícito: libera el sessionId para que un login
+// posterior (incluso desde el mismo dispositivo) no quede pidiendo
+// confirmación a una sesión que ya nadie va a responder.
+app.post("/api/auth/logout", verificarToken, async (req, res) => {
+  await User.findByIdAndUpdate(req.user.id, {
+    sessionId: null,
+    sessionLastSeen: null,
+  });
+  res.json({ ok: true });
 });
 
 // Endpoint ligero para que el cliente verifique periódicamente que la cuenta
@@ -368,7 +396,12 @@ app.get(
   verificarToken,
   pollingLimiter,
   async (req, res) => {
-    const cuenta = await User.findById(req.user.id).select("pendingSession");
+    // Heartbeat: mientras esta ruta se siga consultando, la sesión sigue viva.
+    const cuenta = await User.findByIdAndUpdate(
+      req.user.id,
+      { sessionLastSeen: new Date() },
+      { new: true },
+    ).select("pendingSession");
     if (cuenta?.pendingSession?.estado === "pendiente") {
       const vencida =
         Date.now() - new Date(cuenta.pendingSession.creadoEn).getTime() >
