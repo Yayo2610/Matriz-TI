@@ -9,7 +9,6 @@ import {
   X,
   Users,
   Settings,
-  UserPlus,
   Search,
   Filter,
   Eye,
@@ -137,13 +136,13 @@ function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPorPagina, setItemsPorPagina] = useState(25);
   const OPCIONES_TAMANO_PAGINA = [5, 10, 30, 50, 100];
+  const itemsPorPaginaSelectRef = useRef(null);
 
   // 👥 ESTADOS DE OPERADORES Y SEGURIDAD (USUARIOS)
   const [showPassword, setShowPassword] = useState(false);
   const [isEditingUser, setIsEditingUser] = useState(false);
   const [editUserId, setEditUserId] = useState(null);
   const [registeredUsers, setRegisteredUsers] = useState([]);
-  const [mostrarUsuarios, setMostrarUsuarios] = useState(false);
 
   // 🕓 ÚLTIMA SINCRONIZACIÓN (cajetín de título)
   const [lastSyncAt, setLastSyncAt] = useState(null);
@@ -161,6 +160,7 @@ function App() {
   const [mostrarFormPersona, setMostrarFormPersona] = useState(false);
   const [personPage, setPersonPage] = useState(1);
   const [personPageSize, setPersonPageSize] = useState(10);
+  const personPageSizeSelectRef = useRef(null);
   const personFileInputRef = useRef(null);
 
   // 📥 CONSOLA DE APROVISIONAMIENTO: "manual" | "bulk-assets"
@@ -200,6 +200,29 @@ function App() {
     role: "tecnico",
     permisos: { lectura: true, escritura: false, modificacion: false },
   });
+  const [userSearch, setUserSearch] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState("todos");
+  const [userPage, setUserPage] = useState(1);
+  const [userPageSize, setUserPageSize] = useState(10);
+  const userPageSizeSelectRef = useRef(null);
+
+  const ROLE_STYLES = {
+    admin: {
+      label: "Admin",
+      pill: "text-fuchsia-300 border-fuchsia-400/40 bg-fuchsia-400/10",
+      dot: "bg-fuchsia-400",
+    },
+    tecnico: {
+      label: "Técnico",
+      pill: "text-violet-300 border-violet-400/40 bg-violet-400/10",
+      dot: "bg-violet-400",
+    },
+    coordinador: {
+      label: "Coordinador",
+      pill: "text-amber-300 border-amber-400/40 bg-amber-400/10",
+      dot: "bg-amber-400",
+    },
+  };
 
   // ⚙️ LÓGICA DE FILTRADO COMPLETA (INVENTARIO)
   const filteredAssets = assets.filter((asset) => {
@@ -837,6 +860,32 @@ function App() {
 
   useEffect(() => {
     return () => detenerPollSolicitudLogin();
+  }, []);
+
+  // Chrome/Firefox restauran el <select> visualmente al valor elegido antes de
+  // un F5, sin pasar por onChange: el DOM puede mostrar "5" mientras el estado
+  // de React sigue en su valor inicial. Al montar, se toma como fuente de
+  // verdad lo que el navegador realmente está mostrando.
+  useEffect(() => {
+    const domVal = Number(itemsPorPaginaSelectRef.current?.value);
+    if (OPCIONES_TAMANO_PAGINA.includes(domVal) && domVal !== itemsPorPagina) {
+      setItemsPorPagina(domVal);
+    }
+    const domValPersonal = Number(personPageSizeSelectRef.current?.value);
+    if (
+      OPCIONES_TAMANO_PAGINA.includes(domValPersonal) &&
+      domValPersonal !== personPageSize
+    ) {
+      setPersonPageSize(domValPersonal);
+    }
+    const domValUsers = Number(userPageSizeSelectRef.current?.value);
+    if (
+      OPCIONES_TAMANO_PAGINA.includes(domValUsers) &&
+      domValUsers !== userPageSize
+    ) {
+      setUserPageSize(domValUsers);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -1629,7 +1678,9 @@ function App() {
                   <span className="flex items-center gap-2">
                     MOSTRAR
                     <select
+                      ref={itemsPorPaginaSelectRef}
                       value={itemsPorPagina}
+                      autoComplete="off"
                       onChange={(e) => {
                         setItemsPorPagina(Number(e.target.value));
                         setCurrentPage(1);
@@ -1706,10 +1757,10 @@ function App() {
                             S/N
                           </label>
                           <input
-                            className={`w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border transition-all uppercase text-xs placeholder-slate-500 ${
+                            className={`w-full p-3.5 bg-[#1f2937] outline-none text-white border transition-all uppercase text-sm placeholder-slate-500 ${
                               isDuplicateSerial
-                                ? "border-red-500/60 focus:border-red-500 focus:ring-2 focus:ring-red-500/40"
-                                : "border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40"
+                                ? "border-red-500/60 focus:border-red-500"
+                                : "border-fuchsia-400/20 focus:border-fuchsia-400"
                             }`}
                             placeholder="S/N"
                             value={form.serialNumber}
@@ -1732,7 +1783,7 @@ function App() {
                             Marca
                           </label>
                           <input
-                            className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all capitalize text-xs placeholder-slate-500"
+                            className="w-full p-3.5 bg-[#1f2937] outline-none text-white border border-fuchsia-400/20 focus:border-fuchsia-400 transition-all capitalize text-sm placeholder-slate-500"
                             placeholder="Marca"
                             value={form.brand}
                             onChange={(e) =>
@@ -1746,7 +1797,7 @@ function App() {
                             Modelo
                           </label>
                           <input
-                            className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all uppercase text-xs placeholder-slate-500"
+                            className="w-full p-3.5 bg-[#1f2937] outline-none text-white border border-fuchsia-400/20 focus:border-fuchsia-400 transition-all uppercase text-sm placeholder-slate-500"
                             placeholder="Modelo"
                             value={form.model}
                             onChange={(e) =>
@@ -1760,7 +1811,7 @@ function App() {
                             Tipo
                           </label>
                           <input
-                            className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs placeholder-slate-500"
+                            className="w-full p-3.5 bg-[#1f2937] outline-none text-white border border-fuchsia-400/20 focus:border-fuchsia-400 transition-all text-sm placeholder-slate-500"
                             placeholder="Ej. Desktop, Laptop, Router..."
                             value={form.type}
                             onChange={(e) =>
@@ -1772,7 +1823,7 @@ function App() {
 
                         {/* CONTROL DE ASIGNACIÓN INTERACTIVO */}
                         {employeesDirectory.length > 0 ? (
-                          <div className="space-y-1.5 p-2 bg-[#0a0f1a] rounded-xl border border-white/5">
+                          <div className="space-y-1.5 p-3 bg-[#0a0f1a] border border-fuchsia-400/10">
                             <label className="text-[9px] text-emerald-400 uppercase font-black tracking-wider block">
                               Asignar desde Nómina
                             </label>
@@ -1782,7 +1833,7 @@ function App() {
                                   (em) => em.fullName === form.assignedTo,
                                 )?.id || ""
                               }
-                              className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-slate-200 border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs cursor-pointer"
+                              className="w-full p-3.5 bg-[#1f2937] outline-none text-slate-200 border border-fuchsia-400/20 focus:border-fuchsia-400 transition-colors text-sm cursor-pointer"
                               onChange={(e) => {
                                 const val = e.target.value;
                                 if (!val) {
@@ -1831,7 +1882,7 @@ function App() {
                                 Nombre de quien recibe
                               </label>
                               <input
-                                className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all capitalize text-xs placeholder-slate-500"
+                                className="w-full p-3.5 bg-[#1f2937] outline-none text-white border border-fuchsia-400/20 focus:border-fuchsia-400 transition-all capitalize text-sm placeholder-slate-500"
                                 placeholder="Nombre de quien recibe"
                                 value={form.assignedTo}
                                 onChange={(e) =>
@@ -1847,7 +1898,7 @@ function App() {
                                 Área de trabajo
                               </label>
                               <input
-                                className="w-full p-2.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all uppercase text-xs placeholder-slate-500"
+                                className="w-full p-3.5 bg-[#1f2937] outline-none text-white border border-fuchsia-400/20 focus:border-fuchsia-400 transition-all uppercase text-sm placeholder-slate-500"
                                 placeholder="Área de trabajo"
                                 value={form.department}
                                 onChange={(e) =>
@@ -1864,7 +1915,7 @@ function App() {
                         <button
                           type="submit"
                           disabled={isDuplicateSerial}
-                          className="w-full p-3 rounded-xl font-bold text-white text-xs uppercase bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 transition-all shadow-[0_0_20px_-8px_rgba(232,121,249,0.28)] hover:shadow-[0_0_28px_-6px_rgba(232,121,249,0.32)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                          className="w-full p-3.5 font-bold text-white text-sm uppercase bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 transition-all shadow-[0_0_20px_-8px_rgba(232,121,249,0.28)] hover:shadow-[0_0_28px_-6px_rgba(232,121,249,0.32)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
                         >
                           Guardar Activo
                         </button>
@@ -1894,7 +1945,7 @@ function App() {
                             S/N, Marca, Modelo, Tipo, Nombre, Área.
                           </p>
                         </div>
-                        <label className="w-full py-3 bg-[#1f2937] hover:bg-[#2d3748] rounded-xl border border-white/5 cursor-pointer text-xs font-bold text-slate-300 transition-all">
+                        <label className="w-full py-3.5 bg-[#1f2937] hover:bg-[#2d3748] border border-fuchsia-400/20 cursor-pointer text-sm font-bold text-slate-300 transition-all">
                           Seleccionar Archivo
                           <input
                             type="file"
@@ -1915,319 +1966,460 @@ function App() {
 
       {/* SECCIÓN OPERADORES ORIGINAL INTACTA */}
       {/* SECCIÓN OPERADORES (RESTAURADA EXACTAMENTE AL DISEÑO ORIGINAL) */}
-      {currentView === "usuarios" && (
-        <main className="max-w-[1800px] mx-auto p-6 space-y-9">
-          {/* PANEL DE REGISTRO */}
-          <div className="bg-[#111827] p-8 rounded-2xl border border-white/5 shadow-xl">
-            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-              {isEditingUser ? (
-                <Pencil className="text-yellow-500" />
-              ) : (
-                <UserPlus className="text-fuchsia-400" />
-              )}
-              {isEditingUser ? "Editar Usuario" : "Usuarios"}
-            </h2>
-            <form onSubmit={handleUserSubmit} className="space-y-4">
-              <input
-                type="text"
-                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs"
-                placeholder="Nombre(S)"
-                value={userForm.nombre}
-                onChange={(e) =>
-                  setUserForm({ ...userForm, nombre: e.target.value })
-                }
-                required
-              />
-              <input
-                type="text"
-                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs"
-                placeholder="Apellido(S)"
-                value={userForm.apellido}
-                onChange={(e) =>
-                  setUserForm({ ...userForm, apellido: e.target.value })
-                }
-                required
-              />
-              <input
-                type="email"
-                className="w-full p-3.5 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="Correo electrónico"
-                value={userForm.email}
-                onChange={(e) =>
-                  setUserForm({ ...userForm, email: e.target.value })
-                }
-                disabled={isEditingUser}
-                required
-              />
-              {isEditingUser && (
-                <p className="text-[9px] text-slate-500 -mt-2 ml-1">
-                  El correo no se puede modificar desde aquí.
-                </p>
-              )}
+      {currentView === "usuarios" &&
+        (() => {
+          const listaUsuarios = [
+            {
+              _id: "self",
+              nombre: userNombre,
+              apellido: userApellido,
+              email: userEmail,
+              role,
+              permisos: { lectura: true, escritura: true, modificacion: true },
+              activo: true,
+              esActual: true,
+            },
+            ...registeredUsers.map((u) => ({ ...u, esActual: false })),
+          ];
 
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  className="w-full p-3.5 pr-11 bg-[#1f2937] rounded-xl outline-none text-white border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all text-xs"
-                  placeholder={
-                    isEditingUser
-                      ? "Nueva contraseña (dejar en blanco para no cambiarla)"
-                      : "Contraseña temporal"
-                  }
-                  value={userForm.password}
-                  onChange={(e) =>
-                    setUserForm({ ...userForm, password: e.target.value })
-                  }
-                  required={!isEditingUser}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
+          const usuariosFiltrados = listaUsuarios.filter((u) => {
+            const coincideTexto = `${u.nombre} ${u.apellido} ${u.email}`
+              .toLowerCase()
+              .includes(userSearch.toLowerCase());
+            const coincideRol =
+              userRoleFilter === "todos" || u.role === userRoleFilter;
+            return coincideTexto && coincideRol;
+          });
 
-              <p className="text-[9px] text-slate-500 flex items-center gap-1.5 mt-1 ml-1">
-                <ShieldCheck size={12} />
-                {isEditingUser
-                  ? "Si escribes una contraseña nueva, aplica la misma política: mínimo 8 dígitos, 1 Mayúscula y 1 Número."
-                  : "Política: Mínimo 8 dígitos, 1 Mayúscula y 1 Número."}
-              </p>
+          const totalPaginasUsuarios = Math.max(
+            1,
+            Math.ceil(usuariosFiltrados.length / userPageSize),
+          );
+          const userPageSegura = Math.min(userPage, totalPaginasUsuarios);
+          const usuariosPaginados = usuariosFiltrados.slice(
+            (userPageSegura - 1) * userPageSize,
+            userPageSegura * userPageSize,
+          );
 
-              {/* MATRIZ DE PERMISOS */}
-              <div className="pt-4">
-                <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 ml-1">
-                  Matriz de Permisos
-                </h3>
-                <div className="space-y-3 bg-[#0a0f1a] p-5 rounded-xl border border-white/5">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={userForm.permisos?.lectura || false}
-                      onChange={(e) =>
-                        setUserForm({
-                          ...userForm,
-                          permisos: {
-                            ...userForm.permisos,
-                            lectura: e.target.checked,
-                          },
-                        })
-                      }
-                      className="w-4 h-4 rounded-full appearance-none border-2 border-slate-600 checked:border-fuchsia-400 checked:bg-fuchsia-400 transition-colors cursor-pointer"
-                    />
-                    <span className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors">
-                      Lectura{" "}
-                      <span className="text-slate-500 font-normal">
-                        (Solo leer)
-                      </span>
+          return (
+            <main className="max-w-[1800px] mx-auto p-6">
+              <div className="grid lg:grid-cols-[1fr_320px] gap-5 items-start">
+                {/* LISTA DE CUENTAS */}
+                <div className="relative bg-[#111827] border border-fuchsia-400/25">
+                  <span className="absolute -top-px -left-px w-2.5 h-2.5 border-t-2 border-l-2 border-fuchsia-400 pointer-events-none" />
+                  <span className="absolute -top-px -right-px w-2.5 h-2.5 border-t-2 border-r-2 border-fuchsia-400 pointer-events-none" />
+
+                  <div className="flex items-center justify-between p-4 border-b border-dashed border-fuchsia-400/20">
+                    <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                      <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
+                      Cuentas del sistema
+                    </h2>
+                    <span className="font-mono-data text-[10px] text-slate-500">
+                      {String(usuariosFiltrados.length).padStart(2, "0")}{" "}
+                      registros
                     </span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={userForm.permisos?.escritura || false}
-                      onChange={(e) =>
-                        setUserForm({
-                          ...userForm,
-                          permisos: {
-                            ...userForm.permisos,
-                            escritura: e.target.checked,
-                          },
-                        })
-                      }
-                      className="w-4 h-4 rounded-full appearance-none border-2 border-slate-600 checked:border-fuchsia-400 checked:bg-fuchsia-400 transition-colors cursor-pointer"
-                    />
-                    <span className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors">
-                      Escritura{" "}
-                      <span className="text-slate-500 font-normal">
-                        (Alta nuevos activos)
-                      </span>
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={userForm.permisos?.modificacion || false}
-                      onChange={(e) =>
-                        setUserForm({
-                          ...userForm,
-                          permisos: {
-                            ...userForm.permisos,
-                            modificacion: e.target.checked,
-                          },
-                        })
-                      }
-                      className="w-4 h-4 rounded-full appearance-none border-2 border-slate-600 checked:border-fuchsia-400 checked:bg-fuchsia-400 transition-colors cursor-pointer"
-                    />
-                    <span className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors">
-                      Modificación{" "}
-                      <span className="text-slate-500 font-normal">
-                        (Editar y eliminar)
-                      </span>
-                    </span>
-                  </label>
-                </div>
-              </div>
+                  </div>
 
-              <button className="w-full p-4 rounded-xl font-bold text-white bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 text-xs uppercase tracking-wider transition-all shadow-[0_0_20px_-8px_rgba(232,121,249,0.28)] hover:shadow-[0_0_28px_-6px_rgba(232,121,249,0.32)] mt-4">
-                {isEditingUser ? "Guardar Cambios" : "Registrar"}
-              </button>
-              {isEditingUser && (
-                <button
-                  type="button"
-                  onClick={cancelEditUser}
-                  className="w-full text-xs text-slate-500 text-center block hover:text-white cursor-pointer"
-                >
-                  Cancelar edición
-                </button>
-              )}
-            </form>
-          </div>
-
-          {/* TABLA DE CUENTAS */}
-          <div className="bg-[#111827] rounded-2xl border border-white/5 p-8 shadow-xl">
-            <div
-              className="mb-8 flex items-center justify-between cursor-pointer"
-              onClick={() => setMostrarUsuarios(!mostrarUsuarios)}
-            >
-              <div>
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                  Usuarios
-                </h2>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Lista perimetral seccionada de cuentas con acceso a la API
-                  en producción.
-                </p>
-              </div>
-              <ChevronDown
-                size={18}
-                className={`text-slate-500 transition-transform ${mostrarUsuarios ? "rotate-180" : ""}`}
-              />
-            </div>
-
-            {mostrarUsuarios && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-white/5 text-[9px] text-slate-500 font-black uppercase tracking-[0.15em]">
-                    <th className="px-6 pb-4">Colaborador</th>
-                    <th className="px-6 pb-4">Correo Local</th>
-                    <th className="px-6 pb-4">Directivas de Acceso (ACL)</th>
-                    <th className="px-6 pb-4 text-center">Estado</th>
-                    <th className="px-6 pb-4 text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {/* USUARIO MASTER (TÚ) */}
-                  <tr className="hover:bg-white/[0.02] transition-colors">
-                    <td className="px-6 py-5 font-bold text-white capitalize">
-                      {userNombre} {userApellido}
-                    </td>
-                    <td className="px-6 py-5 text-slate-400 font-mono">
-                      {userEmail}
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="flex gap-2">
-                        <span className="bg-fuchsia-400/10 text-fuchsia-400 border border-fuchsia-400/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
-                          Lectura
-                        </span>
-                        <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
-                          Escritura
-                        </span>
-                        <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
-                          Modificación
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5 text-center">
-                      <div className="flex items-center justify-center gap-1.5 text-emerald-400 font-bold text-[10px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>{" "}
-                        Activo
-                      </div>
-                    </td>
-                    <td className="px-6 py-5 text-right text-slate-600 italic text-[10px]">
-                      Master Root
-                    </td>
-                  </tr>
-
-                  {/* USUARIOS REGISTRADOS DINÁMICAMENTE (desde el backend) */}
-                  {registeredUsers.map((u) => (
-                    <tr
-                      key={u._id}
-                      className="hover:bg-white/[0.02] transition-colors"
+                  <div className="flex gap-2 p-3 border-b border-dashed border-fuchsia-400/20">
+                    <div className="flex-1 flex items-center gap-2 bg-[#0a0f1a] border border-fuchsia-400/20 px-3">
+                      <Search size={13} className="text-slate-500 shrink-0" />
+                      <input
+                        className="w-full bg-transparent outline-none text-slate-200 font-mono-data text-xs py-2.5 placeholder-slate-500"
+                        placeholder="BUSCAR NOMBRE O CORREO"
+                        value={userSearch}
+                        onChange={(e) => {
+                          setUserSearch(e.target.value);
+                          setUserPage(1);
+                        }}
+                      />
+                    </div>
+                    <select
+                      className="bg-[#0a0f1a] border border-fuchsia-400/20 text-slate-300 px-2 text-xs outline-none cursor-pointer focus:border-fuchsia-400 transition-colors"
+                      value={userRoleFilter}
+                      onChange={(e) => {
+                        setUserRoleFilter(e.target.value);
+                        setUserPage(1);
+                      }}
                     >
-                      <td className="px-6 py-5 font-bold text-white capitalize">
-                        {u.nombre} {u.apellido}
-                      </td>
-                      <td className="px-6 py-5 text-slate-400 font-mono">
-                        {u.email}
-                        <span className="block text-[9px] bg-fuchsia-400/10 text-fuchsia-400 border border-fuchsia-400/20 px-2 py-0.5 rounded uppercase font-bold tracking-widest mt-1 w-fit">
-                          {u.role}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5">
-                        <div className="flex flex-wrap gap-2">
-                          {u.permisos?.lectura && (
-                            <span className="bg-fuchsia-400/10 text-fuchsia-400 border border-fuchsia-400/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
-                              Lectura
+                      <option value="todos">Todos los roles</option>
+                      <option value="admin">Admin</option>
+                      <option value="tecnico">Técnico</option>
+                      <option value="coordinador">Coordinador</option>
+                    </select>
+                  </div>
+
+                  <div className="divide-y divide-dashed divide-fuchsia-400/10">
+                    {usuariosPaginados.map((u) => {
+                      const rs = ROLE_STYLES[u.role] || ROLE_STYLES.tecnico;
+                      return (
+                        <div
+                          key={u._id}
+                          className="grid grid-cols-[32px_1fr_112px_92px_98px_60px] items-center gap-3 px-4 py-3"
+                        >
+                          <div className="w-8 h-8 border border-fuchsia-400/20 flex items-center justify-center font-mono-data text-[10px] font-bold text-cyan-300 shrink-0">
+                            {(u.nombre?.[0] || "") + (u.apellido?.[0] || "")}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold capitalize truncate">
+                              {u.nombre} {u.apellido}
+                            </div>
+                            <div className="font-mono-data text-[10px] text-slate-500 truncate">
+                              {u.email}
+                            </div>
+                          </div>
+                          <span
+                            className={`inline-flex items-center gap-1.5 font-mono-data text-[9px] font-bold uppercase tracking-widest px-2 py-1 border w-fit ${rs.pill}`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${rs.dot}`}
+                            />
+                            {rs.label}
+                          </span>
+                          <div className="flex gap-1">
+                            <span
+                              title="Lectura"
+                              className={`w-5 h-5 flex items-center justify-center border font-mono-data text-[9px] ${
+                                u.permisos?.lectura
+                                  ? "border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300 font-bold"
+                                  : "border-white/10 text-slate-600"
+                              }`}
+                            >
+                              L
                             </span>
+                            <span
+                              title="Escritura"
+                              className={`w-5 h-5 flex items-center justify-center border font-mono-data text-[9px] ${
+                                u.permisos?.escritura
+                                  ? "border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300 font-bold"
+                                  : "border-white/10 text-slate-600"
+                              }`}
+                            >
+                              E
+                            </span>
+                            <span
+                              title="Modificación"
+                              className={`w-5 h-5 flex items-center justify-center border font-mono-data text-[9px] ${
+                                u.permisos?.modificacion
+                                  ? "border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300 font-bold"
+                                  : "border-white/10 text-slate-600"
+                              }`}
+                            >
+                              M
+                            </span>
+                          </div>
+                          {u.esActual ? (
+                            <span className="flex items-center gap-1.5 font-mono-data text-[9px] font-bold uppercase text-emerald-400">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                              Activo
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                toggleUserStatus(u._id, u.nombre, u.activo)
+                              }
+                              className={`flex items-center gap-1.5 font-mono-data text-[9px] font-bold uppercase transition-colors cursor-pointer ${
+                                u.activo
+                                  ? "text-emerald-400 hover:text-red-400"
+                                  : "text-slate-500 hover:text-emerald-400"
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${u.activo ? "bg-emerald-400" : "bg-slate-500"}`}
+                              />
+                              {u.activo ? "Activo" : "Suspendido"}
+                            </button>
                           )}
-                          {u.permisos?.escritura && (
-                            <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
-                              Escritura
+                          {u.esActual ? (
+                            <span className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-600 text-right">
+                              Tú
                             </span>
-                          )}
-                          {u.permisos?.modificacion && (
-                            <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded uppercase text-[8px] font-black tracking-widest">
-                              Modificación
-                            </span>
+                          ) : (
+                            <div className="flex gap-1 justify-end">
+                              <button
+                                onClick={() => startEditUser(u)}
+                                className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-fuchsia-400 transition-colors cursor-pointer"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                onClick={() => deleteUser(u._id)}
+                                className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
                           )}
                         </div>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <button
-                          onClick={() =>
-                            toggleUserStatus(u._id, u.nombre, u.activo)
+                      );
+                    })}
+                    {usuariosPaginados.length === 0 && (
+                      <p className="text-center font-mono-data text-[10px] text-slate-600 py-10">
+                        Ningún operador coincide con la búsqueda.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="p-4 border-t border-dashed border-fuchsia-400/20 flex flex-wrap items-center justify-between gap-3 font-mono-data text-[11px]">
+                    <div className="flex items-center gap-3 text-slate-500">
+                      <span>
+                        MOSTRANDO{" "}
+                        {String(
+                          usuariosFiltrados.length === 0
+                            ? 0
+                            : (userPageSegura - 1) * userPageSize + 1,
+                        ).padStart(3, "0")}
+                        –
+                        {String(
+                          Math.min(
+                            userPageSegura * userPageSize,
+                            usuariosFiltrados.length,
+                          ),
+                        ).padStart(3, "0")}{" "}
+                        DE {usuariosFiltrados.length}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        MOSTRAR
+                        <select
+                          ref={userPageSizeSelectRef}
+                          value={userPageSize}
+                          autoComplete="off"
+                          onChange={(e) => {
+                            setUserPageSize(Number(e.target.value));
+                            setUserPage(1);
+                          }}
+                          className="bg-[#0a0f1a] border border-fuchsia-400/20 text-slate-300 px-2 py-1 outline-none cursor-pointer focus:border-fuchsia-400 transition-colors"
+                        >
+                          {OPCIONES_TAMANO_PAGINA.map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-500">
+                        PÁGINA {String(userPageSegura).padStart(2, "0")} /{" "}
+                        {String(totalPaginasUsuarios).padStart(2, "0")}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={userPageSegura === 1}
+                        onClick={() => setUserPage(userPageSegura - 1)}
+                        className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
+                      >
+                        Anterior
+                      </button>
+                      <button
+                        type="button"
+                        disabled={userPageSegura === totalPaginasUsuarios}
+                        onClick={() => setUserPage(userPageSegura + 1)}
+                        className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
+                      >
+                        Siguiente
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* NUEVA CUENTA / EDITAR */}
+                <div className="relative bg-[#111827] p-5 border border-fuchsia-400/25 sticky top-28 space-y-4">
+                  <span className="absolute -top-px -left-px w-2.5 h-2.5 border-t-2 border-l-2 border-fuchsia-400 pointer-events-none" />
+                  <span className="absolute -top-px -right-px w-2.5 h-2.5 border-t-2 border-r-2 border-fuchsia-400 pointer-events-none" />
+
+                  <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
+                    {isEditingUser ? "Editar Usuario" : "Nueva Cuenta"}
+                  </h2>
+
+                  <form onSubmit={handleUserSubmit} className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
+                        Nombre(s)
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full p-3.5 bg-[#1f2937] outline-none text-white border border-fuchsia-400/20 focus:border-fuchsia-400 transition-colors text-sm placeholder-slate-500"
+                        placeholder="Nombre(s)"
+                        value={userForm.nombre}
+                        onChange={(e) =>
+                          setUserForm({ ...userForm, nombre: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
+                        Apellido(s)
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full p-3.5 bg-[#1f2937] outline-none text-white border border-fuchsia-400/20 focus:border-fuchsia-400 transition-colors text-sm placeholder-slate-500"
+                        placeholder="Apellido(s)"
+                        value={userForm.apellido}
+                        onChange={(e) =>
+                          setUserForm({
+                            ...userForm,
+                            apellido: e.target.value,
+                          })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
+                        Correo
+                      </label>
+                      <input
+                        type="email"
+                        className="w-full p-3.5 bg-[#1f2937] outline-none text-white border border-fuchsia-400/20 focus:border-fuchsia-400 transition-colors text-sm placeholder-slate-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        placeholder="juan.perez@empresa.com"
+                        value={userForm.email}
+                        onChange={(e) =>
+                          setUserForm({ ...userForm, email: e.target.value })
+                        }
+                        disabled={isEditingUser}
+                        required
+                      />
+                      {isEditingUser && (
+                        <p className="text-[9px] text-slate-500 px-1">
+                          El correo no se puede modificar desde aquí.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
+                        Contraseña temporal
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          className="w-full p-3.5 pr-11 bg-[#1f2937] outline-none text-white border border-fuchsia-400/20 focus:border-fuchsia-400 transition-colors text-sm placeholder-slate-500"
+                          placeholder={
+                            isEditingUser
+                              ? "Dejar en blanco para no cambiarla"
+                              : "Contraseña temporal"
                           }
-                          className={`flex items-center justify-center gap-1.5 font-bold text-[10px] mx-auto transition-colors ${u.activo ? "text-emerald-400 hover:text-red-400" : "text-slate-500 hover:text-emerald-400"}`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${u.activo ? "bg-emerald-400" : "bg-slate-500"}`}
-                          ></span>{" "}
-                          {u.activo ? "Activo" : "Suspendido"}
-                        </button>
-                      </td>
-                      <td className="px-6 py-5 text-right">
+                          value={userForm.password}
+                          onChange={(e) =>
+                            setUserForm({
+                              ...userForm,
+                              password: e.target.value,
+                            })
+                          }
+                          required={!isEditingUser}
+                        />
                         <button
-                          onClick={() => startEditUser(u)}
-                          className="text-slate-500 hover:text-yellow-500 transition-colors mr-3"
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 cursor-pointer"
                         >
-                          <Pencil size={16} />
+                          {showPassword ? (
+                            <EyeOff size={15} />
+                          ) : (
+                            <Eye size={15} />
+                          )}
                         </button>
-                        <button
-                          onClick={() => deleteUser(u._id)}
-                          className="text-slate-500 hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {registeredUsers.length === 0 && (
-                <p className="text-center text-[9px] text-slate-600 mt-8 italic mb-2">
-                  Ningún operador adicional registrado. Usa el panel superior
-                  para dar de alta una cuenta corporativa en esta sección.
-                </p>
-              )}
-            </div>
-            )}
-          </div>
-        </main>
-      )}
+                      </div>
+                      <p className="font-mono-data text-[9px] text-slate-500 flex items-center gap-1.5 px-1">
+                        <ShieldCheck size={11} />
+                        Mínimo 8 dígitos, 1 Mayúscula y 1 Número.
+                      </p>
+                    </div>
+
+                    <div className="pt-1">
+                      <h3 className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-2 px-1">
+                        Matriz de Permisos
+                      </h3>
+                      <div className="border border-fuchsia-400/20 bg-[#0a0f1a]">
+                        {[
+                          {
+                            key: "lectura",
+                            label: "Lectura",
+                            desc: "Ver inventario y personal",
+                          },
+                          {
+                            key: "escritura",
+                            label: "Escritura",
+                            desc: "Alta de activos y personal",
+                          },
+                          {
+                            key: "modificacion",
+                            label: "Modificación",
+                            desc: "Editar y eliminar registros",
+                          },
+                        ].map((perm, i) => {
+                          const activo = userForm.permisos?.[perm.key] || false;
+                          return (
+                            <div
+                              key={perm.key}
+                              className={`flex items-center justify-between p-3 ${
+                                i < 2
+                                  ? "border-b border-dashed border-fuchsia-400/10"
+                                  : ""
+                              }`}
+                            >
+                              <div>
+                                <div className="text-xs font-bold text-slate-200">
+                                  {perm.label}
+                                </div>
+                                <div className="font-mono-data text-[9px] text-slate-500">
+                                  {perm.desc}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setUserForm({
+                                    ...userForm,
+                                    permisos: {
+                                      ...userForm.permisos,
+                                      [perm.key]: !activo,
+                                    },
+                                  })
+                                }
+                                className={`relative w-9 h-5 border transition-colors shrink-0 cursor-pointer ${
+                                  activo
+                                    ? "border-fuchsia-400 bg-fuchsia-400/10"
+                                    : "border-white/15 bg-[#20233a]"
+                                }`}
+                              >
+                                <span
+                                  className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 transition-transform ${
+                                    activo
+                                      ? "translate-x-4 bg-fuchsia-400"
+                                      : "bg-slate-500"
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full p-3.5 font-bold text-white text-sm uppercase bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 transition-all shadow-[0_0_20px_-8px_rgba(232,121,249,0.28)] hover:shadow-[0_0_28px_-6px_rgba(232,121,249,0.32)] cursor-pointer"
+                    >
+                      {isEditingUser ? "Guardar Cambios" : "Registrar Cuenta"}
+                    </button>
+                    {isEditingUser && (
+                      <button
+                        type="button"
+                        onClick={cancelEditUser}
+                        className="w-full text-xs text-slate-500 text-center block hover:text-white cursor-pointer"
+                      >
+                        Cancelar edición
+                      </button>
+                    )}
+                  </form>
+                </div>
+              </div>
+            </main>
+          );
+        })()}
       {/* ========================================================================= */}
       {/* 👥 DIRECTORIO DE PERSONAL — CRUD individual (solo admin) */}
       {/* ========================================================================= */}
@@ -2413,7 +2605,9 @@ function App() {
                     <span className="flex items-center gap-2">
                       MOSTRAR
                       <select
+                        ref={personPageSizeSelectRef}
                         value={personPageSize}
+                        autoComplete="off"
                         onChange={(e) => {
                           setPersonPageSize(Number(e.target.value));
                           setPersonPage(1);
