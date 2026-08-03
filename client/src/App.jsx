@@ -1701,6 +1701,7 @@ function App() {
                       <th className="px-6 py-3 text-right whitespace-nowrap">
                         Estado
                       </th>
+                      <th className="px-6 py-3"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-dashed divide-fuchsia-400/10">
@@ -1724,13 +1725,16 @@ function App() {
                             <div className="h-3 w-24 bg-white/10 rounded" />
                           </td>
                           <td className="px-6 py-4">
-                            <div className="h-7 w-32 bg-white/10 rounded-xl ml-auto" />
+                            <div className="h-7 w-24 bg-white/10 rounded-xl ml-auto" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="h-6 w-14 bg-white/10 rounded-xl ml-auto" />
                           </td>
                         </tr>
                       ))
                     ) : filteredAssets.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-16">
+                        <td colSpan={7} className="px-6 py-16">
                           <div className="flex flex-col items-center gap-3 text-center">
                             <div className="p-4 bg-white/5 rounded-full">
                               <PackageOpen size={28} className="text-slate-600" />
@@ -1800,74 +1804,74 @@ function App() {
                           )}
                         </td>
                         <td className="px-6 py-3.5 text-right">
-                          <div className="inline-flex items-center justify-end gap-2 whitespace-nowrap">
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                                {(a.status || "En Stock") === "En Stock" ? (
-                                  <PackageOpen
-                                    size={12}
-                                    className="text-blue-400"
-                                  />
-                                ) : (a.status || "En Stock") ===
-                                  "Asignado" ? (
-                                  <UserCheck
-                                    size={12}
-                                    className="text-emerald-400"
-                                  />
-                                ) : (
-                                  <Wrench
-                                    size={12}
-                                    className="text-orange-400"
-                                  />
-                                )}
-                              </span>
-                              <select
-                                disabled={!tienePermiso("modificacion")}
-                                value={a.status || "En Stock"}
-                                onChange={(e) =>
-                                  handleStatusChange(a._id, e.target.value)
-                                }
-                                className={`pl-8 pr-3 py-1.5 font-mono-data text-[10.5px] font-bold border outline-none cursor-pointer ${(a.status || "En Stock") === "En Stock" ? "bg-blue-600/10 text-blue-400 border-blue-500/30" : (a.status || "En Stock") === "Asignado" ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/30" : "bg-orange-600/10 text-orange-400 border-orange-500/30"}`}
+                          <div className="relative inline-block">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                              {(a.status || "En Stock") === "En Stock" ? (
+                                <PackageOpen
+                                  size={12}
+                                  className="text-blue-400"
+                                />
+                              ) : (a.status || "En Stock") ===
+                                "Asignado" ? (
+                                <UserCheck
+                                  size={12}
+                                  className="text-emerald-400"
+                                />
+                              ) : (
+                                <Wrench
+                                  size={12}
+                                  className="text-orange-400"
+                                />
+                              )}
+                            </span>
+                            <select
+                              disabled={!tienePermiso("modificacion")}
+                              value={a.status || "En Stock"}
+                              onChange={(e) =>
+                                handleStatusChange(a._id, e.target.value)
+                              }
+                              className={`pl-8 pr-3 py-1.5 font-mono-data text-[10.5px] font-bold border outline-none cursor-pointer ${(a.status || "En Stock") === "En Stock" ? "bg-blue-600/10 text-blue-400 border-blue-500/30" : (a.status || "En Stock") === "Asignado" ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/30" : "bg-orange-600/10 text-orange-400 border-orange-500/30"}`}
+                            >
+                              <option
+                                value="En Stock"
+                                className="bg-[#1f2937]"
                               >
-                                <option
-                                  value="En Stock"
-                                  className="bg-[#1f2937]"
-                                >
-                                  En Stock
-                                </option>
-                                <option
-                                  value="Asignado"
-                                  className="bg-[#1f2937]"
-                                >
-                                  Asignado
-                                </option>
-                                <option
-                                  value="En Mantenimiento"
-                                  className="bg-[#1f2937]"
-                                >
-                                  Mantenimiento
-                                </option>
-                              </select>
-                            </div>
-                            {tienePermiso("modificacion") && (
-                              <span className="inline-flex items-center gap-1">
-                                <button
-                                  onClick={() => startEdit(a)}
-                                  className="text-slate-500 p-1.5 hover:text-white transition-colors cursor-pointer"
-                                  title="Editar"
-                                >
-                                  <Pencil size={14} />
-                                </button>
-                                <button
-                                  onClick={() => deleteAsset(a._id)}
-                                  className="text-slate-500 p-1.5 hover:text-red-400 transition-colors cursor-pointer"
-                                  title="Eliminar"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </span>
-                            )}
+                                En Stock
+                              </option>
+                              <option
+                                value="Asignado"
+                                className="bg-[#1f2937]"
+                              >
+                                Asignado
+                              </option>
+                              <option
+                                value="En Mantenimiento"
+                                className="bg-[#1f2937]"
+                              >
+                                Mantenimiento
+                              </option>
+                            </select>
                           </div>
+                        </td>
+                        <td className="px-6 py-3.5 text-right">
+                          {tienePermiso("modificacion") && (
+                            <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                              <button
+                                onClick={() => startEdit(a)}
+                                className="text-slate-500 p-1.5 hover:text-white transition-colors cursor-pointer"
+                                title="Editar"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => deleteAsset(a._id)}
+                                className="text-slate-500 p-1.5 hover:text-red-400 transition-colors cursor-pointer"
+                                title="Eliminar"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </span>
+                          )}
                         </td>
                       </tr>
                       ))
