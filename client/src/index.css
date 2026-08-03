@@ -4,4 +4,5 @@
 @theme {
   --font-sans: "Rajdhani", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Orbitron", "Rajdhani", ui-sans-serif, sans-serif;
+  --font-mono-data: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
 }

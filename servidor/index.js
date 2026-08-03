@@ -310,6 +310,15 @@ app.delete(
   },
 );
 
+// Excel en Windows suele guardar el CSV con un BOM de UTF-8 al inicio;
+// si no se quita, corrompe el encabezado de la primera columna.
+const quitarBOM = (buffer) => {
+  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    return buffer.slice(3);
+  }
+  return buffer;
+};
+
 const firmarToken = (user, sessionId) =>
   jwt.sign(
     { id: user._id, sid: sessionId },
@@ -384,6 +393,64 @@ app.post("/api/auth/logout", verificarToken, async (req, res) => {
   });
   res.json({ ok: true });
 });
+
+// Panel de admin: quién tiene una sesión abierta ahora mismo.
+app.get(
+  "/api/auth/sesiones-activas",
+  verificarToken,
+  verificarRol("admin"),
+  async (req, res) => {
+    try {
+      const cuentas = await User.find({ sessionId: { $ne: null } }).select(
+        "nombre apellido email role sessionLastSeen",
+      );
+      const sesiones = cuentas.map((c) => ({
+        id: c._id,
+        nombre: c.nombre,
+        apellido: c.apellido,
+        email: c.email,
+        role: c.role,
+        esEsteUsuario: String(c._id) === String(req.user.id),
+        activa:
+          !!c.sessionLastSeen &&
+          Date.now() - new Date(c.sessionLastSeen).getTime() < ABANDONO_SESION_MS,
+        ultimaVezVisto: c.sessionLastSeen,
+      }));
+      res.json(sesiones);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+
+// Forzar el cierre de la sesión de otra cuenta (no la propia — para eso
+// está /logout). Se reemplaza el sessionId por uno nuevo que nadie tiene,
+// igual que cuando se aprueba un cambio de sesión entre dispositivos: el
+// token viejo queda inválido en su siguiente petición.
+app.post(
+  "/api/auth/sesiones-activas/:userId/cerrar",
+  verificarToken,
+  verificarRol("admin"),
+  async (req, res) => {
+    if (req.params.userId === req.user.id) {
+      return res.status(400).json({
+        error: "Para cerrar tu propia sesión usa el botón de Salir",
+      });
+    }
+    try {
+      const cuenta = await User.findByIdAndUpdate(req.params.userId, {
+        sessionId: crypto.randomUUID(),
+        sessionLastSeen: null,
+      });
+      if (!cuenta) {
+        return res.status(404).json({ error: "Usuario no encontrado" });
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
 
 // Endpoint ligero para que el cliente verifique periódicamente que la cuenta
 // sigue activa (verificarToken ya rechaza cuentas suspendidas) y para
@@ -648,8 +715,10 @@ app.post(
       });
     }
 
-    const csvString = req.file.buffer.toString("utf8");
+    const csvString = quitarBOM(req.file.buffer).toString("utf8");
     const results = [];
+    const omitidas = [];
+    let filaIndex = 1; // la fila 1 es el encabezado, que se salta
     const stream = Readable.from(csvString);
 
     const parsePromise = new Promise((resolve, reject) => {
@@ -657,10 +726,11 @@ app.post(
         .pipe(
           csv({
             headers: ["S/N", "Marca", "Modelo", "Tipo", "Nombre", "Área"],
-            skipLines: 0,
+            skipLines: 1,
           }),
         )
         .on("data", (row) => {
+          filaIndex++;
           const serialNumber = row["S/N"]?.trim() || "";
           const brand = row["Marca"]?.trim() || "";
           const model = row["Modelo"]?.trim() || "";
@@ -668,8 +738,16 @@ app.post(
           const name = row["Nombre"]?.trim() || "";
           const area = row["Área"]?.trim() || "";
 
-          if (!serialNumber || !brand || !model || !type || !name || !area) {
-            console.warn("Fila incompleta:", row);
+          const faltantes = [];
+          if (!serialNumber) faltantes.push("S/N");
+          if (!brand) faltantes.push("Marca");
+          if (!model) faltantes.push("Modelo");
+          if (!type) faltantes.push("Tipo");
+          if (!name) faltantes.push("Nombre");
+          if (!area) faltantes.push("Área");
+
+          if (faltantes.length > 0) {
+            omitidas.push({ fila: filaIndex, motivo: `Falta: ${faltantes.join(", ")}` });
             return;
           }
 
@@ -697,6 +775,7 @@ app.post(
       return res.status(400).json({
         success: false,
         error: "El archivo CSV no contiene datos válidos o está vacío.",
+        omitidas,
       });
     }
 
@@ -704,7 +783,10 @@ app.post(
 
     res.status(201).json({
       success: true,
-      message: `${inserted.length} equipos insertados correctamente de ${assetsToInsert.length} procesados.`,
+      message: `${inserted.length} equipos insertados correctamente de ${assetsToInsert.length + omitidas.length} filas procesadas.`,
+      inserted: inserted.length,
+      omitidas,
+      total: assetsToInsert.length + omitidas.length,
       data: inserted,
     });
   } catch (error) {
@@ -739,6 +821,69 @@ app.get(
   },
 );
 
+// Alta individual — para agregar un colaborador suelto sin resubir todo el CSV.
+app.post(
+  "/api/employees",
+  verificarToken,
+  verificarPermiso("escritura"),
+  async (req, res) => {
+    try {
+      const { fullName, area } = req.body;
+      if (!fullName || !fullName.trim()) {
+        return res.status(400).json({ error: "El nombre es obligatorio" });
+      }
+      const nuevo = await Employee.create({
+        fullName: fullName.trim(),
+        area: area?.trim() || "General",
+      });
+      res.status(201).json(nuevo);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  },
+);
+
+// Edición individual.
+app.put(
+  "/api/employees/:id",
+  verificarToken,
+  verificarPermiso("escritura"),
+  async (req, res) => {
+    try {
+      const { fullName, area } = req.body;
+      const actualizado = await Employee.findByIdAndUpdate(
+        req.params.id,
+        { fullName, area },
+        { new: true, runValidators: true },
+      );
+      if (!actualizado) {
+        return res.status(404).json({ error: "Colaborador no encontrado" });
+      }
+      res.json(actualizado);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  },
+);
+
+// Baja individual.
+app.delete(
+  "/api/employees/:id",
+  verificarToken,
+  verificarPermiso("escritura"),
+  async (req, res) => {
+    try {
+      const eliminado = await Employee.findByIdAndDelete(req.params.id);
+      if (!eliminado) {
+        return res.status(404).json({ error: "Colaborador no encontrado" });
+      }
+      res.json({ message: "Colaborador eliminado" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+
 // Reemplaza el directorio completo por el contenido del CSV subido, para
 // que quede disponible para todos los usuarios (antes solo vivía en la
 // memoria del navegador de quien lo subía).
@@ -756,27 +901,43 @@ app.post(
         });
       }
 
-      const texto = req.file.buffer.toString("utf8");
-      const lineas = texto.split("\n");
+      const csvString = quitarBOM(req.file.buffer).toString("utf8");
+      const stream = Readable.from(csvString);
       const empleados = [];
+      const omitidas = [];
+      let filaIndex = 1; // la fila 1 es el encabezado, que se salta
 
-      // Cabecera omitida -> Formato esperado: Nombre,Apellido,Puesto_O_Area
-      for (let i = 1; i < lineas.length; i++) {
-        const fila = lineas[i].trim();
-        if (!fila) continue;
+      // Formato esperado: Nombre,Apellido,Área
+      await new Promise((resolve, reject) => {
+        stream
+          .pipe(
+            csv({ headers: ["Nombre", "Apellido", "Área"], skipLines: 1 }),
+          )
+          .on("data", (row) => {
+            filaIndex++;
+            const nombre = row["Nombre"]?.trim() || "";
+            const apellido = row["Apellido"]?.trim() || "";
+            const area = row["Área"]?.trim() || "General";
 
-        const columnas = fila.split(",");
-        if (columnas.length >= 3) {
-          const fullName = `${columnas[0]?.trim() || ""} ${columnas[1]?.trim() || ""}`.trim();
-          const area = columnas[2]?.trim() || "General";
-          if (fullName) empleados.push({ fullName, area });
-        }
-      }
+            if (!nombre || !apellido) {
+              const faltantes = [];
+              if (!nombre) faltantes.push("Nombre");
+              if (!apellido) faltantes.push("Apellido");
+              omitidas.push({ fila: filaIndex, motivo: `Falta: ${faltantes.join(", ")}` });
+              return;
+            }
+
+            empleados.push({ fullName: `${nombre} ${apellido}`, area });
+          })
+          .on("end", resolve)
+          .on("error", reject);
+      });
 
       if (empleados.length === 0) {
         return res.status(400).json({
           success: false,
           error: "El archivo de personal no contiene datos estructurados válidos.",
+          omitidas,
         });
       }
 
@@ -786,6 +947,9 @@ app.post(
       res.status(201).json({
         success: true,
         message: `Directorio actualizado: se precargaron ${inserted.length} colaboradores.`,
+        inserted: inserted.length,
+        omitidas,
+        total: empleados.length + omitidas.length,
         data: inserted,
       });
     } catch (err) {

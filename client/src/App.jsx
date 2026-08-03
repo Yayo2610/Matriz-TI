@@ -145,6 +145,14 @@ function App() {
   const [registeredUsers, setRegisteredUsers] = useState([]);
   const [mostrarUsuarios, setMostrarUsuarios] = useState(false);
 
+  // 🔐 SESIONES ACTIVAS (solo admin)
+  const [sesionesActivas, setSesionesActivas] = useState([]);
+  // 👥 DIRECTORIO DE PERSONAL — CRUD individual (solo admin)
+  const [personForm, setPersonForm] = useState({ fullName: "", area: "" });
+  const [isEditingPerson, setIsEditingPerson] = useState(false);
+  const [editPersonId, setEditPersonId] = useState(null);
+  const [personSearch, setPersonSearch] = useState("");
+
   // 📥 CONSOLA DE APROVISIONAMIENTO: "manual" | "bulk-assets" | "bulk-personal"
   const [registerMode, setRegisterMode] = useState("manual");
 
@@ -307,6 +315,18 @@ function App() {
     );
   };
 
+  // Arma un mensaje corto con las filas que el backend descartó (y por qué),
+  // en vez de dejar ese detalle solo en la consola del servidor.
+  const describirOmitidas = (omitidas) => {
+    if (!omitidas || omitidas.length === 0) return "";
+    const detalle = omitidas
+      .slice(0, 5)
+      .map((o) => `fila ${o.fila} (${o.motivo})`)
+      .join(", ");
+    const extra = omitidas.length > 5 ? ` y ${omitidas.length - 5} más` : "";
+    return `${omitidas.length} fila(s) omitida(s): ${detalle}${extra}.`;
+  };
+
   const handleBulkUploadAssets = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -326,6 +346,8 @@ function App() {
         response.data.message || "Carga masiva exitosa.",
         "success",
       );
+      const detalleOmitidas = describirOmitidas(response.data.omitidas);
+      if (detalleOmitidas) pushToast(detalleOmitidas, "error");
       fetchAssets();
       setActualizarMetricas((prev) => prev + 1);
       e.target.value = ""; // Limpiar input
@@ -353,36 +375,53 @@ function App() {
     }
   };
 
-  const handleBulkUploadEmployees = async (e) => {
+  const handleBulkUploadEmployees = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append("file", file);
+    const subir = async () => {
+      const formData = new FormData();
+      formData.append("file", file);
 
-    try {
-      const response = await axios.post(`${EMPLOYEES_URL}/bulk`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          Authorization: `Bearer ${token}`,
+      try {
+        const response = await axios.post(`${EMPLOYEES_URL}/bulk`, formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        pushToast(
+          response.data.message || "Directorio de personal actualizado.",
+          "success",
+        );
+        const detalleOmitidas = describirOmitidas(response.data.omitidas);
+        if (detalleOmitidas) pushToast(detalleOmitidas, "error");
+        fetchEmployees();
+        setRegisterMode("manual");
+      } catch (err) {
+        console.error(
+          "Error al subir el directorio de personal:",
+          err.response?.data || err.message,
+        );
+        pushToast(
+          `Error al subir el archivo: ${err.response?.data?.error || "Revisa la consola"}`,
+          "error",
+        );
+      } finally {
+        e.target.value = "";
+      }
+    };
+
+    if (employeesDirectory.length > 0) {
+      askConfirm(
+        `Esto reemplazará los ${employeesDirectory.length} colaborador(es) actuales por el contenido de este archivo. ¿Continuar?`,
+        subir,
+        () => {
+          e.target.value = "";
         },
-      });
-      pushToast(
-        response.data.message || "Directorio de personal actualizado.",
-        "success",
       );
-      fetchEmployees();
-      setRegisterMode("manual");
-      e.target.value = "";
-    } catch (err) {
-      console.error(
-        "Error al subir el directorio de personal:",
-        err.response?.data || err.message,
-      );
-      pushToast(
-        `Error al subir el archivo: ${err.response?.data?.error || "Revisa la consola"}`,
-        "error",
-      );
+    } else {
+      subir();
     }
   };
 
@@ -581,6 +620,91 @@ function App() {
     }
   };
 
+  const fetchSesionesActivas = async () => {
+    try {
+      const res = await axios.get(`${AUTH_URL}/sesiones-activas`, clientConfig);
+      setSesionesActivas(res.data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const cerrarSesionAjena = (sesion) => {
+    askConfirm(
+      `¿Cerrar la sesión de ${sesion.nombre} ${sesion.apellido}? Perderá el acceso de inmediato.`,
+      async () => {
+        try {
+          await axios.post(
+            `${AUTH_URL}/sesiones-activas/${sesion.id}/cerrar`,
+            {},
+            clientConfig,
+          );
+          pushToast(`Sesión de ${sesion.nombre} cerrada.`, "success");
+          fetchSesionesActivas();
+        } catch (err) {
+          pushToast(
+            err.response?.data?.error || "No se pudo cerrar la sesión.",
+            "error",
+          );
+        }
+      },
+    );
+  };
+
+  const handlePersonSubmit = async (e) => {
+    e.preventDefault();
+    if (!personForm.fullName.trim()) {
+      pushToast("El nombre es obligatorio.", "error");
+      return;
+    }
+    try {
+      if (isEditingPerson) {
+        await axios.put(
+          `${EMPLOYEES_URL}/${editPersonId}`,
+          personForm,
+          clientConfig,
+        );
+        pushToast("Colaborador actualizado.", "success");
+      } else {
+        await axios.post(EMPLOYEES_URL, personForm, clientConfig);
+        pushToast("Colaborador agregado.", "success");
+      }
+      setPersonForm({ fullName: "", area: "" });
+      setIsEditingPerson(false);
+      setEditPersonId(null);
+      fetchEmployees();
+    } catch (err) {
+      pushToast(
+        err.response?.data?.error || "No se pudo guardar el colaborador.",
+        "error",
+      );
+    }
+  };
+
+  const startEditPerson = (persona) => {
+    setPersonForm({ fullName: persona.fullName, area: persona.area || "" });
+    setEditPersonId(persona.id);
+    setIsEditingPerson(true);
+  };
+
+  const cancelEditPerson = () => {
+    setPersonForm({ fullName: "", area: "" });
+    setIsEditingPerson(false);
+    setEditPersonId(null);
+  };
+
+  const deletePerson = (persona) => {
+    askConfirm(`¿Eliminar a ${persona.fullName} del directorio?`, async () => {
+      try {
+        await axios.delete(`${EMPLOYEES_URL}/${persona.id}`, clientConfig);
+        pushToast("Colaborador eliminado.", "success");
+        fetchEmployees();
+      } catch (err) {
+        pushToast("No se pudo eliminar al colaborador.", "error");
+      }
+    });
+  };
+
   const deleteUser = (id) => {
     askConfirm("¿Confirmas eliminar esta cuenta?", async () => {
       try {
@@ -689,6 +813,10 @@ function App() {
 
   useEffect(() => {
     if (token && role === "admin") fetchUsers();
+  }, [token, role]);
+
+  useEffect(() => {
+    if (token && role === "admin") fetchSesionesActivas();
   }, [token, role]);
 
   if (!token) {
@@ -1020,28 +1148,62 @@ function App() {
           setConfirmDialog(null);
         }}
       />
-      {/* HEADER */}
-      <header className="border-b border-white/5 bg-[#111827]/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
-          <div className="flex items-center gap-3">
+      {/* CAJETÍN DE TÍTULO (identidad "plano técnico / manifiesto") */}
+      <header className="max-w-7xl mx-auto px-6 pt-6">
+        <div className="grid md:grid-cols-[auto_1fr_auto] border border-fuchsia-400/25 bg-[#111827] divide-y md:divide-y-0 md:divide-x divide-dashed divide-fuchsia-400/20">
+          <div className="flex items-center gap-3 px-5 py-4">
             <div className="bg-gradient-to-br from-fuchsia-500 to-purple-600 p-2 rounded-lg shadow-[0_0_20px_-6px_rgba(232,121,249,0.28)]">
-              <Laptop className="text-white" size={24} />
+              <Laptop className="text-white" size={22} />
             </div>
             <div>
-              <span className="text-base font-black text-white block capitalize">
-                {userNombre} {userApellido}
-              </span>
-              <span className="text-[10px] bg-fuchsia-400/10 text-fuchsia-400 border border-fuchsia-400/20 px-2.5 py-0.5 rounded uppercase font-bold tracking-widest mt-0.5 inline-block">
-                {role}
-              </span>
+              <div className="font-display font-black text-sm tracking-widest uppercase">
+                Asset<span className="text-fuchsia-400">Track</span>
+              </div>
+              <div className="font-mono-data text-[9px] text-slate-500 tracking-wider">
+                REGISTRO DE EQUIPO
+              </div>
             </div>
           </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3">
+            <div className="px-5 py-3 border-r border-dashed border-fuchsia-400/15 flex flex-col justify-center">
+              <div className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
+                Titular
+              </div>
+              <div className="font-mono-data text-sm font-semibold capitalize truncate">
+                {userNombre} {userApellido}
+              </div>
+            </div>
+            <div className="px-5 py-3 border-r border-dashed border-fuchsia-400/15 flex flex-col justify-center">
+              <div className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
+                Rol
+              </div>
+              <div className="font-mono-data text-sm font-semibold text-fuchsia-400 uppercase">
+                {role}
+              </div>
+            </div>
+            {role === "admin" && (
+              <button
+                type="button"
+                onClick={() => setCurrentView("sesiones")}
+                className="hidden sm:flex px-5 py-3 flex-col justify-center text-left cursor-pointer hover:bg-white/[0.02] transition-colors"
+              >
+                <div className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
+                  Sesiones activas
+                </div>
+                <div className="font-mono-data text-sm font-semibold text-emerald-400">
+                  {sesionesActivas.length.toString().padStart(2, "0")} dispositivos →
+                </div>
+              </button>
+            )}
+          </div>
+
           <button
             onClick={logout}
-            className="text-slate-400 hover:text-red-400 flex items-center gap-2 transition cursor-pointer"
+            className="flex items-center justify-center gap-2 px-6 py-4 text-slate-400 hover:text-red-400 hover:bg-red-500/5 transition cursor-pointer"
           >
-            <LogOut size={20} />{" "}
-            <span className="hidden md:inline text-sm font-bold uppercase tracking-widest">
+            <LogOut size={18} />
+            <span className="font-mono-data text-xs font-bold uppercase tracking-widest">
               Salir
             </span>
           </button>
@@ -1049,24 +1211,36 @@ function App() {
       </header>
 
       {/* NAVEGACIÓN GLOBAL */}
-      <div className="max-w-7xl mx-auto px-6 mt-6 flex gap-3 overflow-x-auto py-2">
+      <div className="max-w-7xl mx-auto px-6 mt-0 flex gap-0 overflow-x-auto border border-t-0 border-fuchsia-400/25">
         <button
           onClick={() => setCurrentView("inventario")}
-          className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider border cursor-pointer ${currentView === "inventario" ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white border-fuchsia-400 shadow-[0_0_20px_-6px_rgba(232,121,249,0.25)]" : "bg-[#111827] text-slate-400 border-white/5"}`}
+          className={`px-5 py-2.5 font-mono-data font-bold text-[11px] uppercase tracking-wider border-r border-dashed border-fuchsia-400/15 cursor-pointer whitespace-nowrap ${currentView === "inventario" ? "bg-fuchsia-500 text-white" : "bg-[#111827] text-slate-400 hover:text-white"}`}
         >
           Inventario
         </button>
         {role === "admin" && (
           <>
             <button
+              onClick={() => setCurrentView("personal")}
+              className={`px-5 py-2.5 font-mono-data font-bold text-[11px] uppercase tracking-wider border-r border-dashed border-fuchsia-400/15 cursor-pointer whitespace-nowrap ${currentView === "personal" ? "bg-fuchsia-500 text-white" : "bg-[#111827] text-slate-400 hover:text-white"}`}
+            >
+              Personal
+            </button>
+            <button
+              onClick={() => setCurrentView("sesiones")}
+              className={`px-5 py-2.5 font-mono-data font-bold text-[11px] uppercase tracking-wider border-r border-dashed border-fuchsia-400/15 cursor-pointer whitespace-nowrap ${currentView === "sesiones" ? "bg-fuchsia-500 text-white" : "bg-[#111827] text-slate-400 hover:text-white"}`}
+            >
+              Sesiones activas
+            </button>
+            <button
               onClick={() => setCurrentView("usuarios")}
-              className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider border cursor-pointer ${currentView === "usuarios" ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white border-fuchsia-400 shadow-[0_0_20px_-6px_rgba(232,121,249,0.25)]" : "bg-[#111827] text-slate-400 border-white/5"}`}
+              className={`px-5 py-2.5 font-mono-data font-bold text-[11px] uppercase tracking-wider border-r border-dashed border-fuchsia-400/15 cursor-pointer whitespace-nowrap ${currentView === "usuarios" ? "bg-fuchsia-500 text-white" : "bg-[#111827] text-slate-400 hover:text-white"}`}
             >
               Usuarios
             </button>
             <button
               onClick={() => setCurrentView("configuraciones")}
-              className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider border cursor-pointer ${currentView === "configuraciones" ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white border-fuchsia-400 shadow-[0_0_20px_-6px_rgba(232,121,249,0.25)]" : "bg-[#111827] text-slate-400 border-white/5"}`}
+              className={`px-5 py-2.5 font-mono-data font-bold text-[11px] uppercase tracking-wider cursor-pointer whitespace-nowrap ${currentView === "configuraciones" ? "bg-fuchsia-500 text-white" : "bg-[#111827] text-slate-400 hover:text-white"}`}
             >
               Configuraciones
             </button>
@@ -1086,27 +1260,27 @@ function App() {
             {tienePermiso("escritura") && (
               /* --- ESTE ES EL PANEL LATERAL CON LA MEJORA VISUAL EXACTA --- */
               <aside className="lg:col-span-3">
-                <div className="bg-[#111827] p-5 rounded-2xl border border-white/5 sticky top-28 space-y-6 shadow-xl">
+                <div className="bg-[#111827] p-5 border border-fuchsia-400/25 sticky top-28 space-y-6">
                   {/* SELECTOR DE MODO */}
-                  <div className="grid grid-cols-3 gap-1 bg-[#0a0f1a] p-1 rounded-xl border border-white/5 text-[9px] font-bold text-center uppercase tracking-wider">
+                  <div className="grid grid-cols-3 gap-1 bg-[#0a0f1a] p-1 border border-fuchsia-400/15 text-[9px] font-mono-data font-bold text-center uppercase tracking-wider">
                     <button
                       type="button"
                       onClick={() => setRegisterMode("manual")}
-                      className={`py-2 rounded-lg cursor-pointer transition-all ${registerMode === "manual" ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                      className={`py-2 cursor-pointer transition-all ${registerMode === "manual" ? "bg-fuchsia-500 text-white" : "text-slate-500 hover:text-slate-300"}`}
                     >
                       Manual
                     </button>
                     <button
                       type="button"
                       onClick={() => setRegisterMode("bulk-assets")}
-                      className={`py-2 rounded-lg cursor-pointer transition-all ${registerMode === "bulk-assets" ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                      className={`py-2 cursor-pointer transition-all ${registerMode === "bulk-assets" ? "bg-fuchsia-500 text-white" : "text-slate-500 hover:text-slate-300"}`}
                     >
                       + Activos
                     </button>
                     <button
                       type="button"
                       onClick={() => setRegisterMode("bulk-personal")}
-                      className={`py-2 rounded-lg cursor-pointer transition-all ${registerMode === "bulk-personal" ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                      className={`py-2 cursor-pointer transition-all ${registerMode === "bulk-personal" ? "bg-fuchsia-500 text-white" : "text-slate-500 hover:text-slate-300"}`}
                     >
                       + Personal
                     </button>
@@ -1313,9 +1487,9 @@ function App() {
                             Carga de Inventario
                           </h3>
                           <p className="text-[10px] text-slate-500 mt-1 px-2">
-                            Sube tu archivo .CSV de activos siguiendo la
-                            estructura establecida: S/N, Marca, Modelo, Tipo,
-                            Nombre, Área.
+                            Sube tu archivo .CSV de activos con una primera
+                            fila de encabezado y columnas en este orden:
+                            S/N, Marca, Modelo, Tipo, Nombre, Área.
                           </p>
                         </div>
                         <label className="w-full py-3 bg-[#1f2937] hover:bg-[#2d3748] rounded-xl border border-white/5 cursor-pointer text-xs font-bold text-slate-300 transition-all">
@@ -1340,8 +1514,9 @@ function App() {
                           </h3>
                           <p className="text-[10px] text-slate-500 mt-1 px-2">
                             Precarga el archivo de nómina (.CSV) para
-                            automatizar la asignación. Formato: Nombre,
-                            Apellido, Área_O_Puesto.
+                            automatizar la asignación. Con una primera fila
+                            de encabezado y columnas: Nombre, Apellido, Área.
+                            Reemplaza el directorio actual por completo.
                           </p>
                         </div>
                         <label className="w-full py-3 bg-[#1f2937] hover:bg-[#2d3748] rounded-xl border border-white/5 cursor-pointer text-xs font-bold text-slate-300 transition-all">
@@ -1361,24 +1536,25 @@ function App() {
             )}
 
             <section
-              className={`${tienePermiso("escritura") ? "lg:col-span-9" : "lg:col-span-12"} bg-[#111827] rounded-2xl border border-white/5 overflow-hidden`}
+              className={`${tienePermiso("escritura") ? "lg:col-span-9" : "lg:col-span-12"} bg-[#111827] border border-fuchsia-400/25 overflow-hidden`}
             >
-              <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">
-                <h2 className="text-sm font-display font-bold text-white uppercase tracking-[0.15em]">
-                  Inventario Actual
+              <div className="px-6 py-4 border-b border-dashed border-fuchsia-400/20 flex justify-between items-center bg-white/[0.01]">
+                <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                  <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
+                  Manifiesto de inventario
                 </h2>
                 <div className="flex items-center gap-4">
-                  <span className="bg-fuchsia-400/10 text-fuchsia-400 px-4 py-1 rounded-full text-xs font-black">
-                    {filteredAssets.length} ITEMS
+                  <span className="font-mono-data text-fuchsia-400 text-xs font-bold">
+                    {filteredAssets.length} registros
                   </span>
                   {role === "admin" && (
                     <>
-                      <div className="w-px h-6 bg-white/10" />
+                      <div className="w-px h-6 bg-fuchsia-400/15" />
                       <button
                         onClick={handleDeleteAllAssets}
-                        className="flex items-center gap-2 bg-transparent hover:bg-red-600/20 border border-red-500/30 text-red-400/80 hover:text-red-400 px-4 py-2 rounded-xl text-xs font-bold transition-colors"
+                        className="flex items-center gap-2 bg-transparent hover:bg-red-600/10 border border-red-500/30 text-red-400/80 hover:text-red-400 px-3 py-1.5 font-mono-data text-[11px] font-bold uppercase tracking-wider transition-colors"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={14} />
                         Eliminar todos
                       </button>
                     </>
@@ -1387,21 +1563,21 @@ function App() {
               </div>
 
               {/* FILTROS ORIGINALES */}
-              <div className="p-4 bg-[#0e1422] border-b border-white/5 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+              <div className="p-4 bg-[#0a0f1a] border-b border-dashed border-fuchsia-400/20 grid grid-cols-1 md:grid-cols-3 gap-3 w-full">
                 <div className="relative">
                   <Search
-                    size={16}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+                    size={14}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"
                   />
                   <input
                     type="text"
-                    placeholder="Buscar S/N, marca, modelo..."
+                    placeholder="BUSCAR S/N · MARCA · MODELO"
                     value={searchTerm}
                     onChange={(e) => {
                       setSearchTerm(e.target.value);
                       setCurrentPage(1);
                     }}
-                    className="w-full pl-11 pr-4 py-2.5 bg-[#1f2937] rounded-xl outline-none text-xs text-slate-200 border border-transparent focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/40 transition-all"
+                    className="w-full pl-10 pr-4 py-2.5 bg-[#111827] font-mono-data outline-none text-xs text-slate-200 border border-fuchsia-400/20 focus:border-fuchsia-400 transition-colors"
                   />
                 </div>
                 <div className="relative">
@@ -1411,7 +1587,7 @@ function App() {
                       setFilterType(e.target.value);
                       setCurrentPage(1);
                     }}
-                    className="w-full pl-4 pr-10 py-2.5 bg-[#1f2937] rounded-xl outline-none text-xs text-slate-200 border border-transparent focus:border-fuchsia-400 cursor-pointer appearance-none"
+                    className="w-full pl-4 pr-10 py-2.5 bg-[#111827] outline-none text-xs text-slate-300 border border-fuchsia-400/20 focus:border-fuchsia-400 cursor-pointer appearance-none transition-colors"
                   >
                     <option value="Todos">Todos los tipos</option>
                     <option value="Desktop">Desktop</option>
@@ -1444,7 +1620,7 @@ function App() {
                       setFilterStatus(e.target.value);
                       setCurrentPage(1);
                     }}
-                    className="w-full pl-4 pr-10 py-2.5 bg-[#1f2937] rounded-xl outline-none text-xs text-slate-200 border border-transparent focus:border-fuchsia-400 cursor-pointer appearance-none"
+                    className="w-full pl-4 pr-10 py-2.5 bg-[#111827] outline-none text-xs text-slate-300 border border-fuchsia-400/20 focus:border-fuchsia-400 cursor-pointer appearance-none transition-colors"
                   >
                     <option value="Todos">Todos los estados</option>
                     <option value="En Stock">En Stock</option>
@@ -1460,21 +1636,21 @@ function App() {
 
               <div className="max-w-full overflow-x-auto">
                 <table className="w-full table-auto">
-                  <thead className="bg-white/2 text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">
+                  <thead className="text-slate-500 text-[9px] font-mono-data font-bold uppercase tracking-[0.15em] border-b border-fuchsia-400/20">
                     <tr>
-                      <th className="px-6 py-4 text-left">Hardware</th>
-                      <th className="px-6 py-4 text-left">Tipo</th>
-                      <th className="px-6 py-4 text-left">Serial No.</th>
-                      <th className="px-6 py-4 text-left whitespace-nowrap">
+                      <th className="px-6 py-3 text-left">Hardware</th>
+                      <th className="px-6 py-3 text-left">Tipo</th>
+                      <th className="px-6 py-3 text-left">Serial No.</th>
+                      <th className="px-6 py-3 text-left whitespace-nowrap">
                         Asignado a
                       </th>
-                      <th className="px-6 py-4 text-left">Área</th>
-                      <th className="px-6 py-4 text-right whitespace-nowrap">
+                      <th className="px-6 py-3 text-left">Área</th>
+                      <th className="px-6 py-3 text-right whitespace-nowrap">
                         Estado y Acciones
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className="divide-y divide-dashed divide-fuchsia-400/10">
                     {assetsLoading ? (
                       Array.from({ length: 8 }).map((_, idx) => (
                         <tr key={`skeleton-${idx}`} className="animate-pulse">
@@ -1517,39 +1693,48 @@ function App() {
                         </td>
                       </tr>
                     ) : (
-                      paginatedAssets.map((a, idx) => (
+                      paginatedAssets.map((a) => (
                       <tr
                         key={a._id}
-                        className={`hover:bg-white/5 transition text-xs ${idx % 2 === 1 ? "bg-white/[0.02]" : ""}`}
+                        className="hover:bg-white/[0.03] transition text-xs"
                       >
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-3.5">
                           <div className="text-white font-bold capitalize">
                             {a.brand}
                           </div>
-                          <div className="text-[11px] text-slate-500 uppercase">
+                          <div className="text-[10.5px] text-slate-500 uppercase">
                             {a.model}
                           </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className="bg-white/5 text-slate-300 border border-white/10 px-3 py-1.5 rounded-xl text-[11px] font-bold uppercase tracking-wider">
+                        <td className="px-6 py-3.5">
+                          <span className="border border-fuchsia-400/20 text-slate-300 px-2.5 py-1 font-mono-data text-[9.5px] font-bold uppercase tracking-wider">
                             {a.type === "Otro" && a.typeOther
                               ? a.typeOther
                               : a.type || "Sin definir"}
                           </span>
                         </td>
-                        <td className="px-6 py-4 font-mono text-fuchsia-400 uppercase">
-                          {a.serialNumber}
+                        <td className="px-6 py-3.5">
+                          <span className="inline-flex items-center gap-2 font-mono-data text-[11px] text-fuchsia-300">
+                            <span
+                              className="inline-block w-4 h-3 opacity-70"
+                              style={{
+                                backgroundImage:
+                                  "repeating-linear-gradient(90deg, currentColor 0 1.5px, transparent 1.5px 3.5px)",
+                              }}
+                            />
+                            {a.serialNumber}
+                          </span>
                         </td>
-                        <td className="px-6 py-4 text-slate-300 capitalize">
+                        <td className="px-6 py-3.5 text-slate-300 capitalize font-mono-data">
                           {(a.status || "En Stock") === "En Stock" ? (
-                            <span className="text-slate-600 italic">
+                            <span className="text-slate-600 italic font-sans">
                               Sin Asignar
                             </span>
                           ) : (
                             a.assignedTo || "N/A"
                           )}
                         </td>
-                        <td className="px-6 py-4 text-slate-300 uppercase max-w-[160px]">
+                        <td className="px-6 py-3.5 text-slate-300 uppercase max-w-[160px]">
                           {(a.status || "En Stock") === "En Stock" ? (
                             <span className="text-slate-600 italic">—</span>
                           ) : (
@@ -1561,7 +1746,7 @@ function App() {
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-6 py-3.5 text-right">
                           <div className="inline-flex items-center justify-end gap-2 whitespace-nowrap">
                             <div className="relative">
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -1589,7 +1774,7 @@ function App() {
                                 onChange={(e) =>
                                   handleStatusChange(a._id, e.target.value)
                                 }
-                                className={`pl-8 pr-3 py-1.5 text-[11px] font-bold rounded-xl border outline-none cursor-pointer ${(a.status || "En Stock") === "En Stock" ? "bg-blue-600/10 text-blue-400 border-blue-500/20" : (a.status || "En Stock") === "Asignado" ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/20" : "bg-orange-600/10 text-orange-400 border-orange-500/20"}`}
+                                className={`pl-8 pr-3 py-1.5 font-mono-data text-[10.5px] font-bold border outline-none cursor-pointer ${(a.status || "En Stock") === "En Stock" ? "bg-blue-600/10 text-blue-400 border-blue-500/30" : (a.status || "En Stock") === "Asignado" ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/30" : "bg-orange-600/10 text-orange-400 border-orange-500/30"}`}
                               >
                                 <option
                                   value="En Stock"
@@ -1639,16 +1824,16 @@ function App() {
               </div>
 
               {totalPaginas > 1 && (
-                <div className="p-4 border-t border-white/5 flex items-center justify-between text-xs">
+                <div className="p-4 border-t border-dashed border-fuchsia-400/20 flex items-center justify-between font-mono-data text-[11px]">
                   <span className="text-slate-500">
-                    Página {paginaSegura} de {totalPaginas}
+                    PÁGINA {String(paginaSegura).padStart(2, "0")} / {String(totalPaginas).padStart(2, "0")}
                   </span>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       disabled={paginaSegura === 1}
                       onClick={() => setCurrentPage(paginaSegura - 1)}
-                      className="px-3 py-1.5 rounded-lg bg-[#1f2937] text-slate-300 font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#2d3748] transition-colors cursor-pointer"
+                      className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
                     >
                       Anterior
                     </button>
@@ -1656,7 +1841,7 @@ function App() {
                       type="button"
                       disabled={paginaSegura === totalPaginas}
                       onClick={() => setCurrentPage(paginaSegura + 1)}
-                      className="px-3 py-1.5 rounded-lg bg-[#1f2937] text-slate-300 font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#2d3748] transition-colors cursor-pointer"
+                      className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
                     >
                       Siguiente
                     </button>
@@ -1983,6 +2168,201 @@ function App() {
           </div>
         </main>
       )}
+      {/* ========================================================================= */}
+      {/* 👥 DIRECTORIO DE PERSONAL — CRUD individual (solo admin) */}
+      {/* ========================================================================= */}
+      {currentView === "personal" && role === "admin" && (
+        <main className="max-w-5xl mx-auto p-6 space-y-6">
+          <div className="border border-fuchsia-400/25 bg-[#111827]">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-dashed border-fuchsia-400/20">
+              <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
+                {isEditingPerson ? "Editar colaborador" : "Alta de colaborador"}
+              </h2>
+            </div>
+            <form onSubmit={handlePersonSubmit} className="p-5 grid sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+              <div>
+                <label className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">
+                  Nombre completo
+                </label>
+                <input
+                  className="w-full p-2.5 bg-[#0a0f1a] border border-fuchsia-400/20 outline-none font-mono-data text-sm focus:border-fuchsia-400 transition-colors"
+                  placeholder="Juan Pérez"
+                  value={personForm.fullName}
+                  onChange={(e) =>
+                    setPersonForm({ ...personForm, fullName: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div>
+                <label className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">
+                  Área
+                </label>
+                <input
+                  className="w-full p-2.5 bg-[#0a0f1a] border border-fuchsia-400/20 outline-none font-mono-data text-sm focus:border-fuchsia-400 transition-colors"
+                  placeholder="TI"
+                  value={personForm.area}
+                  onChange={(e) =>
+                    setPersonForm({ ...personForm, area: e.target.value })
+                  }
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-fuchsia-500 hover:bg-fuchsia-400 text-white font-mono-data text-xs font-bold uppercase tracking-widest cursor-pointer transition-colors"
+                >
+                  {isEditingPerson ? "Guardar" : "Agregar"}
+                </button>
+                {isEditingPerson && (
+                  <button
+                    type="button"
+                    onClick={cancelEditPerson}
+                    className="px-4 py-2.5 border border-fuchsia-400/20 text-slate-400 hover:text-white font-mono-data text-xs font-bold uppercase tracking-widest cursor-pointer transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          <div className="border border-fuchsia-400/25 bg-[#111827]">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-dashed border-fuchsia-400/20">
+              <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
+                Directorio de personal
+              </h2>
+              <span className="font-mono-data text-[10px] text-slate-500">
+                {employeesDirectory.length} registros
+              </span>
+            </div>
+            <div className="px-5 py-3 border-b border-dashed border-fuchsia-400/20">
+              <input
+                className="w-full p-2 bg-[#0a0f1a] border border-fuchsia-400/20 outline-none font-mono-data text-xs focus:border-fuchsia-400 transition-colors"
+                placeholder="Buscar colaborador o área…"
+                value={personSearch}
+                onChange={(e) => setPersonSearch(e.target.value)}
+              />
+            </div>
+            <div className="divide-y divide-dashed divide-fuchsia-400/10">
+              {employeesDirectory
+                .filter((p) =>
+                  `${p.fullName} ${p.area}`
+                    .toLowerCase()
+                    .includes(personSearch.toLowerCase()),
+                )
+                .map((persona) => (
+                  <div
+                    key={persona.id}
+                    className="flex items-center gap-4 px-5 py-3 hover:bg-white/[0.02] transition-colors"
+                  >
+                    <div className="w-8 h-8 border border-fuchsia-400/20 flex items-center justify-center font-mono-data text-[10px] font-bold text-fuchsia-400 shrink-0">
+                      {persona.fullName
+                        .split(" ")
+                        .map((p) => p[0])
+                        .slice(0, 2)
+                        .join("")
+                        .toUpperCase()}
+                    </div>
+                    <div className="flex-1 text-sm font-semibold">
+                      {persona.fullName}
+                    </div>
+                    <div className="font-mono-data text-[10px] text-slate-400 border border-white/10 px-2 py-0.5 uppercase">
+                      {persona.area || "General"}
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => startEditPerson(persona)}
+                        className="p-1.5 text-yellow-500 hover:bg-yellow-500/10 transition-colors cursor-pointer"
+                        title="Editar"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => deletePerson(persona)}
+                        className="p-1.5 text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                        title="Eliminar"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              {employeesDirectory.length === 0 && (
+                <div className="px-5 py-10 text-center font-mono-data text-xs text-slate-500">
+                  Sin colaboradores registrados todavía.
+                </div>
+              )}
+            </div>
+          </div>
+        </main>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🔐 SESIONES ACTIVAS (solo admin) */}
+      {/* ========================================================================= */}
+      {currentView === "sesiones" && role === "admin" && (
+        <main className="max-w-5xl mx-auto p-6">
+          <div className="border border-fuchsia-400/25 bg-[#111827]">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-dashed border-fuchsia-400/20">
+              <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
+                Sesiones activas
+              </h2>
+              <span className="font-mono-data text-[10px] text-slate-500">
+                Cierra la sesión de alguien más si hace falta
+              </span>
+            </div>
+            <div className="divide-y divide-dashed divide-fuchsia-400/10">
+              {sesionesActivas.map((sesion) => (
+                <div
+                  key={sesion.id}
+                  className="flex items-center gap-4 px-5 py-3.5"
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${sesion.activa ? "bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,.18)]" : "bg-slate-600"}`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold capitalize truncate">
+                      {sesion.nombre} {sesion.apellido}{" "}
+                      <span className="text-slate-500 font-normal">
+                        — {sesion.role}
+                      </span>
+                    </div>
+                    <div className="font-mono-data text-[10px] text-slate-500 mt-0.5">
+                      {sesion.esEsteUsuario
+                        ? "Este dispositivo · activa ahora"
+                        : sesion.activa
+                          ? "Activa ahora"
+                          : "Sin actividad reciente"}
+                    </div>
+                  </div>
+                  {sesion.esEsteUsuario ? (
+                    <span className="font-mono-data text-[10px] font-bold uppercase tracking-widest text-slate-600 px-3 py-1.5 border border-white/10">
+                      Tú
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => cerrarSesionAjena(sesion)}
+                      className="font-mono-data text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-red-400 hover:border-red-400/40 px-3 py-1.5 border border-fuchsia-400/20 transition-colors cursor-pointer"
+                    >
+                      Cerrar sesión
+                    </button>
+                  )}
+                </div>
+              ))}
+              {sesionesActivas.length === 0 && (
+                <div className="px-5 py-10 text-center font-mono-data text-xs text-slate-500">
+                  No hay sesiones activas en este momento.
+                </div>
+              )}
+            </div>
+          </div>
+        </main>
+      )}
+
       {/* CONFIGURACIONES ORIGINAL INTACTA */}
       {currentView === "configuraciones" && (
         <main className="max-w-5xl mx-auto p-6">
