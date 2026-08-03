@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useRef } from "react";
 import axios from "axios";
 import {
   Trash2,
@@ -46,6 +46,10 @@ function App() {
     limpiarSesionExpirada,
     cuentaSuspendida,
     limpiarCuentaSuspendida,
+    sesionCerradaOtroDispositivo,
+    limpiarSesionCerradaOtroDispositivo,
+    solicitudSesion,
+    responderSolicitudSesion,
   } = useContext(AuthContext);
 
   // --- ESTADOS LOCALES ---
@@ -59,6 +63,11 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [currentView, setCurrentView] = useState("inventario");
+
+  // 🔐 SESIÓN ÚNICA: espera de confirmación en el otro dispositivo al iniciar sesión
+  const [esperandoOtraSesion, setEsperandoOtraSesion] = useState(false);
+  const [solicitudSesionRechazada, setSolicitudSesionRechazada] = useState(false);
+  const pollSolicitudLoginRef = useRef(null);
 
   // 🔑 RECUPERACIÓN DE CONTRASEÑA
   const [authView, setAuthView] = useState("login"); // "login" | "forgot"
@@ -88,9 +97,37 @@ function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const askConfirm = (message, onConfirm) => {
-    setConfirmDialog({ message, onConfirm });
+  const askConfirm = (message, onConfirm, onCancel) => {
+    setConfirmDialog({ message, onConfirm, onCancel });
   };
+
+  // 🔐 SESIÓN ÚNICA: alguien está iniciando sesión con esta misma cuenta en
+  // otro dispositivo — se le pregunta al usuario si quiere cederla.
+  const solicitudSesionMostradaRef = useRef(null);
+
+  useEffect(() => {
+    if (!solicitudSesion) {
+      solicitudSesionMostradaRef.current = null;
+      return;
+    }
+    if (solicitudSesionMostradaRef.current === solicitudSesion.requestId) {
+      return;
+    }
+    solicitudSesionMostradaRef.current = solicitudSesion.requestId;
+
+    askConfirm(
+      "Se está iniciando sesión con tu cuenta en otro dispositivo.\n¿Quieres cerrar tu sesión aquí y continuar allá?",
+      () => {
+        pushToast("Sesión cerrada aquí. Continuando en el otro dispositivo.", "success");
+        responderSolicitudSesion(true);
+      },
+      () => {
+        pushToast("Solicitud rechazada. Tu sesión sigue activa aquí.", "success");
+        responderSolicitudSesion(false);
+      },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solicitudSesion]);
 
   // 🔍 ESTADOS DE FILTROS (INVENTARIO)
   const [searchTerm, setSearchTerm] = useState("");
@@ -587,6 +624,57 @@ function App() {
     setForgotForm({ email: "", newPassword: "", confirmPassword: "" });
   };
 
+  // 🔐 SESIÓN ÚNICA: mientras se espera que el otro dispositivo confirme o
+  // rechace el cambio de sesión, se consulta el resultado cada pocos segundos.
+  const detenerPollSolicitudLogin = () => {
+    if (pollSolicitudLoginRef.current) {
+      clearInterval(pollSolicitudLoginRef.current);
+      pollSolicitudLoginRef.current = null;
+    }
+  };
+
+  const iniciarPollSolicitudLogin = (requestId) => {
+    detenerPollSolicitudLogin();
+    pollSolicitudLoginRef.current = setInterval(async () => {
+      try {
+        const res = await axios.get(
+          `${AUTH_URL}/solicitud-sesion/${requestId}/estado`,
+        );
+        if (res.data.estado === "aprobada") {
+          detenerPollSolicitudLogin();
+          setEsperandoOtraSesion(false);
+          localStorage.setItem("userEmail", loginCredentials.email);
+          login(
+            res.data.token,
+            res.data.role,
+            res.data.permisos,
+            res.data.nombre,
+            res.data.apellido,
+          );
+        } else if (res.data.estado === "rechazada") {
+          detenerPollSolicitudLogin();
+          setEsperandoOtraSesion(false);
+          setSolicitudSesionRechazada(true);
+        } else if (res.data.estado === "expirada") {
+          detenerPollSolicitudLogin();
+          setEsperandoOtraSesion(false);
+          setLoginError("La solicitud expiró. Intenta iniciar sesión de nuevo.");
+        }
+      } catch {
+        // red transitoria: se reintenta en el siguiente ciclo
+      }
+    }, 2500);
+  };
+
+  const cancelarEsperaOtraSesion = () => {
+    detenerPollSolicitudLogin();
+    setEsperandoOtraSesion(false);
+  };
+
+  useEffect(() => {
+    return () => detenerPollSolicitudLogin();
+  }, []);
+
   useEffect(() => {
     if (token) fetchAssets();
   }, [token]);
@@ -620,49 +708,97 @@ function App() {
             )}
           </div>
 
-          {cuentaSuspendida && authView === "login" ? (
-            <div className="mb-6 text-center">
-              <p className="text-xl font-black text-red-400">
-                Tu cuenta fue suspendida
-              </p>
-              <p className="text-xs text-slate-500 mt-1">
-                Contacta a un administrador para más información
-              </p>
-            </div>
-          ) : (
-            sesionExpirada &&
-            authView === "login" && (
-              <div className="mb-6 text-center">
-                <p className="text-xl font-black text-amber-400">
-                  Tu sesión se cerró por inactividad
-                </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Vuelve a iniciar sesión para continuar
-                </p>
-              </div>
-            )
+          {authView === "login" && (
+            <>
+              {cuentaSuspendida ? (
+                <div className="mb-6 text-center">
+                  <p className="text-xl font-black text-red-400">
+                    Tu cuenta fue suspendida
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Contacta a un administrador para más información
+                  </p>
+                </div>
+              ) : sesionCerradaOtroDispositivo ? (
+                <div className="mb-6 text-center">
+                  <p className="text-xl font-black text-amber-400">
+                    Tu sesión se cerró
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Se inició sesión con esta cuenta en otro dispositivo
+                  </p>
+                </div>
+              ) : solicitudSesionRechazada ? (
+                <div className="mb-6 text-center">
+                  <p className="text-xl font-black text-red-400">
+                    Inicio de sesión rechazado
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    El dispositivo con la sesión activa no autorizó el cambio
+                  </p>
+                </div>
+              ) : (
+                sesionExpirada && (
+                  <div className="mb-6 text-center">
+                    <p className="text-xl font-black text-amber-400">
+                      Tu sesión se cerró por inactividad
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Vuelve a iniciar sesión para continuar
+                    </p>
+                  </div>
+                )
+              )}
+            </>
           )}
 
           {authView === "login" ? (
             <>
+              {esperandoOtraSesion ? (
+                <div className="text-center space-y-4 py-2">
+                  <div className="flex justify-center">
+                    <div className="h-10 w-10 border-2 border-fuchsia-400/30 border-t-fuchsia-400 rounded-full animate-spin" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-200">
+                    Esperando confirmación en el otro dispositivo...
+                  </p>
+                  <p className="text-xs text-slate-500 px-2">
+                    Ya hay una sesión activa con esta cuenta. Confírmalo ahí
+                    para continuar aquí.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={cancelarEsperaOtraSesion}
+                    className="text-xs text-slate-500 hover:text-slate-300 font-semibold cursor-pointer transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
                   setLoginError("");
+                  setSolicitudSesionRechazada(false);
                   setIsLoggingIn(true);
                   try {
                     const res = await axios.post(
-                      "https://matriz-ti-backend.onrender.com/api/auth/login",
+                      `${AUTH_URL}/login`,
                       loginCredentials,
                     );
-                    localStorage.setItem("userEmail", loginCredentials.email);
-                    login(
-                      res.data.token,
-                      res.data.role,
-                      res.data.permisos,
-                      res.data.nombre,
-                      res.data.apellido,
-                    );
+                    if (res.status === 202) {
+                      setEsperandoOtraSesion(true);
+                      iniciarPollSolicitudLogin(res.data.requestId);
+                    } else {
+                      localStorage.setItem("userEmail", loginCredentials.email);
+                      login(
+                        res.data.token,
+                        res.data.role,
+                        res.data.permisos,
+                        res.data.nombre,
+                        res.data.apellido,
+                      );
+                    }
                   } catch (err) {
                     setLoginError(
                       err.response?.data?.error || "Credenciales incorrectas",
@@ -686,6 +822,8 @@ function App() {
                     setLoginError("");
                     limpiarSesionExpirada();
                     limpiarCuentaSuspendida();
+                    limpiarSesionCerradaOtroDispositivo();
+                    setSolicitudSesionRechazada(false);
                     setLoginCredentials({
                       ...loginCredentials,
                       email: e.target.value,
@@ -707,6 +845,8 @@ function App() {
                       setLoginError("");
                       limpiarSesionExpirada();
                       limpiarCuentaSuspendida();
+                      limpiarSesionCerradaOtroDispositivo();
+                      setSolicitudSesionRechazada(false);
                       setLoginCredentials({
                         ...loginCredentials,
                         password: e.target.value,
@@ -750,6 +890,7 @@ function App() {
                   ¿Olvidaste tu contraseña?
                 </button>
               </form>
+              )}
               <p className="text-center text-slate-500 text-xs mt-6">
                 Acceso exclusivo para personal autorizado
               </p>
@@ -862,7 +1003,10 @@ function App() {
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       <ConfirmModal
         dialog={confirmDialog}
-        onCancel={() => setConfirmDialog(null)}
+        onCancel={() => {
+          confirmDialog?.onCancel?.();
+          setConfirmDialog(null);
+        }}
         onConfirm={() => {
           confirmDialog?.onConfirm();
           setConfirmDialog(null);

@@ -8,6 +8,7 @@ const LIMITE_INACTIVIDAD_MS = 10 * 60 * 1000; // 10 minutos
 const EVENTOS_ACTIVIDAD = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
 const AUTH_URL = "https://matriz-ti-backend.onrender.com/api/auth";
 const INTERVALO_VERIFICACION_CUENTA_MS = 30 * 1000; // 30 segundos
+const INTERVALO_SOLICITUD_SESION_MS = 4 * 1000; // 4 segundos
 
 const leerPermisos = () => {
   try {
@@ -28,6 +29,9 @@ export const AuthProvider = ({ children }) => {
 
   const [sesionExpirada, setSesionExpirada] = useState(false);
   const [cuentaSuspendida, setCuentaSuspendida] = useState(false);
+  const [sesionCerradaOtroDispositivo, setSesionCerradaOtroDispositivo] =
+    useState(false);
+  const [solicitudSesion, setSolicitudSesion] = useState(null); // { requestId } | null
 
   const login = (
     userToken,
@@ -48,6 +52,8 @@ export const AuthProvider = ({ children }) => {
     setApellido(userApellido);
     setSesionExpirada(false);
     setCuentaSuspendida(false);
+    setSesionCerradaOtroDispositivo(false);
+    setSolicitudSesion(null);
   };
 
   const logout = useCallback(() => {
@@ -57,6 +63,7 @@ export const AuthProvider = ({ children }) => {
     setPermisos(permisosPorDefecto);
     setNombre("");
     setApellido("");
+    setSolicitudSesion(null);
   }, []);
 
   const limpiarSesionExpirada = useCallback(() => {
@@ -67,20 +74,28 @@ export const AuthProvider = ({ children }) => {
     setCuentaSuspendida(false);
   }, []);
 
-  // 🚫 CIERRE DE SESIÓN INSTANTÁNEO SI EL ADMIN SUSPENDE LA CUENTA
-  // Cualquier respuesta del backend marcada como "Cuenta suspendida" cierra
-  // la sesión de inmediato, sin esperar a que expire el token.
+  const limpiarSesionCerradaOtroDispositivo = useCallback(() => {
+    setSesionCerradaOtroDispositivo(false);
+  }, []);
+
+  // 🚫 CIERRE DE SESIÓN INSTANTÁNEO SI EL ADMIN SUSPENDE LA CUENTA, O SI SE
+  // APROBÓ UN INICIO DE SESIÓN EN OTRO DISPOSITIVO (sesión única).
+  // Cualquier respuesta del backend con alguno de estos motivos cierra la
+  // sesión de inmediato, sin esperar a que expire el token.
   useEffect(() => {
     const interceptorId = axios.interceptors.response.use(
       (response) => response,
       (error) => {
         const status = error.response?.status;
-        const mensaje = error.response?.data?.error || "";
-        if (
-          (status === 401 || status === 403) &&
-          mensaje.toLowerCase().includes("suspendida")
-        ) {
+        const mensaje = (error.response?.data?.error || "").toLowerCase();
+        if ((status === 401 || status === 403) && mensaje.includes("suspendida")) {
           setCuentaSuspendida(true);
+          logout();
+        } else if (
+          (status === 401 || status === 403) &&
+          mensaje.includes("otro dispositivo")
+        ) {
+          setSesionCerradaOtroDispositivo(true);
           logout();
         }
         return Promise.reject(error);
@@ -88,6 +103,52 @@ export const AuthProvider = ({ children }) => {
     );
     return () => axios.interceptors.response.eject(interceptorId);
   }, [logout]);
+
+  const responderSolicitudSesion = useCallback(
+    async (aprobar) => {
+      if (!token) return;
+      try {
+        await axios.post(
+          `${AUTH_URL}/solicitud-sesion/responder`,
+          { aprobar },
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      } catch {
+        // si falla la petición, el próximo poll vuelve a detectar la solicitud
+      }
+      setSolicitudSesion(null);
+      if (aprobar) {
+        logout();
+      }
+    },
+    [token, logout],
+  );
+
+  // Sesión única: revisa si otro dispositivo está pidiendo iniciar sesión
+  // con esta misma cuenta, para que el usuario decida si la cede o no.
+  useEffect(() => {
+    if (!token) return;
+
+    const verificarSolicitudSesion = () => {
+      axios
+        .get(`${AUTH_URL}/solicitud-sesion`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        .then((res) => {
+          setSolicitudSesion(
+            res.data.pendiente ? { requestId: res.data.requestId } : null,
+          );
+        })
+        .catch(() => {});
+    };
+
+    verificarSolicitudSesion();
+    const intervalId = setInterval(
+      verificarSolicitudSesion,
+      INTERVALO_SOLICITUD_SESION_MS,
+    );
+    return () => clearInterval(intervalId);
+  }, [token]);
 
   // Sincroniza rol/permisos/nombre con la base de datos: se ejecuta al
   // cargar/recargar la página y luego cada 30s, para que un cambio hecho
@@ -168,6 +229,10 @@ export const AuthProvider = ({ children }) => {
         limpiarSesionExpirada,
         cuentaSuspendida,
         limpiarCuentaSuspendida,
+        sesionCerradaOtroDispositivo,
+        limpiarSesionCerradaOtroDispositivo,
+        solicitudSesion,
+        responderSolicitudSesion,
       }}
     >
       {children}

@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const { body, validationResult } = require("express-validator");
@@ -25,12 +26,24 @@ app.use(express.json());
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
+  // Las rutas de verificación periódica (estado de cuenta y solicitudes de
+  // sesión) tienen su propio límite, más permisivo, porque el cliente las
+  // consulta cada pocos segundos de forma automática.
+  skip: (req) =>
+    req.path === "/api/auth/me" ||
+    req.path.startsWith("/api/auth/solicitud-sesion"),
   message: {
     success: false,
     message: "Demasiadas peticiones desde esta IP, intenta de nuevo más tarde.",
   },
 });
 app.use(limiter);
+
+const pollingLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: "Demasiadas verificaciones, espera un momento." },
+});
 
 // ==========================================
 // 🔑 MIDDLEWARE DE VERIFICACIÓN DE TOKEN
@@ -54,11 +67,19 @@ const verificarToken = async (req, res, next) => {
     // de rol/permisos hecho por el admin aplique sin esperar a un nuevo login
     // (el token puede traer datos desactualizados si se editó la cuenta después).
     const cuenta = await User.findById(decoded.id).select(
-      "role permisos activo nombre apellido",
+      "role permisos activo nombre apellido sessionId",
     );
     if (!cuenta || cuenta.activo === false) {
       return res.status(403).json({
         error: "Cuenta suspendida. Contacta a un administrador.",
+      });
+    }
+
+    // Sesión única: si se aprobó un inicio de sesión en otro dispositivo,
+    // el sessionId de la cuenta cambió y este token queda invalidado.
+    if (cuenta.sessionId && decoded.sid !== cuenta.sessionId) {
+      return res.status(401).json({
+        error: "Tu sesión se cerró porque se inició sesión en otro dispositivo.",
       });
     }
 
@@ -145,6 +166,19 @@ const User =
           modificacion: { type: Boolean, default: false },
         },
         activo: { type: Boolean, default: true },
+        // Sesión única: identifica el token vigente. Un login nuevo con una
+        // sesión ya activa no reemplaza este valor directamente — primero
+        // pasa por pendingSession, a la espera de confirmación del otro lado.
+        sessionId: { type: String, default: null },
+        pendingSession: {
+          requestId: { type: String, default: null },
+          creadoEn: { type: Date, default: null },
+          estado: {
+            type: String,
+            enum: ["pendiente", "aprobada", "rechazada"],
+            default: null,
+          },
+        },
       },
       { timestamps: true },
     ),
@@ -262,6 +296,15 @@ app.delete(
   },
 );
 
+const firmarToken = (user, sessionId) =>
+  jwt.sign(
+    { id: user._id, sid: sessionId },
+    process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",
+    { expiresIn: "8h" },
+  );
+
+const EXPIRACION_SOLICITUD_MS = 2 * 60 * 1000; // 2 minutos
+
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -273,13 +316,26 @@ app.post("/api/auth/login", async (req, res) => {
           error: "Cuenta suspendida. Contacta a un administrador.",
         });
       }
-      const token = jwt.sign(
-        { id: user._id, role: user.role, permisos: user.permisos },
-        process.env.JWT_SECRET || "CLAVE_SECRETA_SOPORTE",
-        { expiresIn: "8h" },
-      );
+
+      // Sesión única: si ya hay una sesión activa, no se reemplaza directo —
+      // se crea una solicitud pendiente que el otro dispositivo debe aceptar.
+      if (user.sessionId) {
+        const requestId = crypto.randomUUID();
+        user.pendingSession = {
+          requestId,
+          creadoEn: new Date(),
+          estado: "pendiente",
+        };
+        await user.save();
+        return res.status(202).json({ pendiente: true, requestId });
+      }
+
+      const sessionId = crypto.randomUUID();
+      user.sessionId = sessionId;
+      await user.save();
+
       res.json({
-        token,
+        token: firmarToken(user, sessionId),
         role: user.role,
         permisos: user.permisos,
         nombre: user.nombre,
@@ -296,7 +352,7 @@ app.post("/api/auth/login", async (req, res) => {
 // Endpoint ligero para que el cliente verifique periódicamente que la cuenta
 // sigue activa (verificarToken ya rechaza cuentas suspendidas) y para
 // refrescar rol/permisos actualizados al cargar o recargar la página.
-app.get("/api/auth/me", verificarToken, (req, res) => {
+app.get("/api/auth/me", verificarToken, pollingLimiter, (req, res) => {
   res.json({
     role: req.user.role,
     permisos: req.user.permisos,
@@ -304,6 +360,107 @@ app.get("/api/auth/me", verificarToken, (req, res) => {
     apellido: req.user.apellido,
   });
 });
+
+// Consultado por el dispositivo con la sesión ya abierta: le avisa si algún
+// otro inicio de sesión está esperando su confirmación.
+app.get(
+  "/api/auth/solicitud-sesion",
+  verificarToken,
+  pollingLimiter,
+  async (req, res) => {
+    const cuenta = await User.findById(req.user.id).select("pendingSession");
+    if (cuenta?.pendingSession?.estado === "pendiente") {
+      const vencida =
+        Date.now() - new Date(cuenta.pendingSession.creadoEn).getTime() >
+        EXPIRACION_SOLICITUD_MS;
+      if (vencida) {
+        cuenta.pendingSession = { requestId: null, creadoEn: null, estado: null };
+        await cuenta.save();
+        return res.json({ pendiente: false });
+      }
+      return res.json({
+        pendiente: true,
+        requestId: cuenta.pendingSession.requestId,
+      });
+    }
+    res.json({ pendiente: false });
+  },
+);
+
+// El dispositivo con la sesión abierta responde sí/no a la solicitud.
+app.post(
+  "/api/auth/solicitud-sesion/responder",
+  verificarToken,
+  pollingLimiter,
+  async (req, res) => {
+    const { aprobar } = req.body;
+    const cuenta = await User.findById(req.user.id);
+    if (!cuenta || cuenta.pendingSession?.estado !== "pendiente") {
+      return res.status(404).json({ error: "No hay ninguna solicitud pendiente" });
+    }
+
+    if (aprobar) {
+      // Al cambiar el sessionId, el token de este dispositivo queda
+      // invalidado en su siguiente petición (lo cierra automáticamente).
+      cuenta.sessionId = cuenta.pendingSession.requestId;
+      cuenta.pendingSession.estado = "aprobada";
+    } else {
+      cuenta.pendingSession.estado = "rechazada";
+    }
+    await cuenta.save();
+    res.json({ ok: true });
+  },
+);
+
+// Consultado por el dispositivo que intenta iniciar sesión, mientras espera
+// la confirmación del otro lado. Sin autenticar: solo identifica con el
+// requestId (UUID aleatorio), que nadie más conoce.
+app.get(
+  "/api/auth/solicitud-sesion/:requestId/estado",
+  pollingLimiter,
+  async (req, res) => {
+    const { requestId } = req.params;
+    const cuenta = await User.findOne({
+      "pendingSession.requestId": requestId,
+    });
+
+    if (!cuenta) {
+      return res.json({ estado: "expirada" });
+    }
+
+    const vencida =
+      Date.now() - new Date(cuenta.pendingSession.creadoEn).getTime() >
+      EXPIRACION_SOLICITUD_MS;
+    if (cuenta.pendingSession.estado === "pendiente" && vencida) {
+      cuenta.pendingSession = { requestId: null, creadoEn: null, estado: null };
+      await cuenta.save();
+      return res.json({ estado: "expirada" });
+    }
+
+    if (cuenta.pendingSession.estado === "aprobada") {
+      res.json({
+        estado: "aprobada",
+        token: firmarToken(cuenta, cuenta.sessionId),
+        role: cuenta.role,
+        permisos: cuenta.permisos,
+        nombre: cuenta.nombre,
+        apellido: cuenta.apellido,
+      });
+      cuenta.pendingSession = { requestId: null, creadoEn: null, estado: null };
+      await cuenta.save();
+      return;
+    }
+
+    if (cuenta.pendingSession.estado === "rechazada") {
+      res.json({ estado: "rechazada" });
+      cuenta.pendingSession = { requestId: null, creadoEn: null, estado: null };
+      await cuenta.save();
+      return;
+    }
+
+    res.json({ estado: "pendiente" });
+  },
+);
 
 app.post("/api/auth/forgot-password", async (req, res) => {
   try {
