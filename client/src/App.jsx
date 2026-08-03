@@ -137,7 +137,8 @@ function App() {
 
   // 📄 PAGINACIÓN (INVENTARIO)
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_POR_PAGINA = 25;
+  const [itemsPorPagina, setItemsPorPagina] = useState(25);
+  const OPCIONES_TAMANO_PAGINA = [5, 10, 30, 50, 100];
 
   // 👥 ESTADOS DE OPERADORES Y SEGURIDAD (USUARIOS)
   const [showPassword, setShowPassword] = useState(false);
@@ -159,6 +160,10 @@ function App() {
   const [isEditingPerson, setIsEditingPerson] = useState(false);
   const [editPersonId, setEditPersonId] = useState(null);
   const [personSearch, setPersonSearch] = useState("");
+  const [mostrarFormPersona, setMostrarFormPersona] = useState(false);
+  const [personPage, setPersonPage] = useState(1);
+  const [personPageSize, setPersonPageSize] = useState(10);
+  const personFileInputRef = useRef(null);
 
   // 📥 CONSOLA DE APROVISIONAMIENTO: "manual" | "bulk-assets" | "bulk-personal"
   const [registerMode, setRegisterMode] = useState("manual");
@@ -219,12 +224,12 @@ function App() {
   // 📄 PÁGINA ACTUAL SOBRE EL RESULTADO YA FILTRADO
   const totalPaginas = Math.max(
     1,
-    Math.ceil(filteredAssets.length / ITEMS_POR_PAGINA),
+    Math.ceil(filteredAssets.length / itemsPorPagina),
   );
   const paginaSegura = Math.min(currentPage, totalPaginas);
   const paginatedAssets = filteredAssets.slice(
-    (paginaSegura - 1) * ITEMS_POR_PAGINA,
-    paginaSegura * ITEMS_POR_PAGINA,
+    (paginaSegura - 1) * itemsPorPagina,
+    paginaSegura * itemsPorPagina,
   );
 
   // 🔁 Detección de S/N duplicado contra el inventario ya cargado
@@ -680,6 +685,7 @@ function App() {
       setPersonForm({ fullName: "", area: "" });
       setIsEditingPerson(false);
       setEditPersonId(null);
+      setMostrarFormPersona(false);
       fetchEmployees();
     } catch (err) {
       pushToast(
@@ -693,12 +699,14 @@ function App() {
     setPersonForm({ fullName: persona.fullName, area: persona.area || "" });
     setEditPersonId(persona.id);
     setIsEditingPerson(true);
+    setMostrarFormPersona(true);
   };
 
   const cancelEditPerson = () => {
     setPersonForm({ fullName: "", area: "" });
     setIsEditingPerson(false);
     setEditPersonId(null);
+    setMostrarFormPersona(false);
   };
 
   const deletePerson = (persona) => {
@@ -1868,31 +1876,52 @@ function App() {
                 </table>
               </div>
 
-              {totalPaginas > 1 && (
-                <div className="p-4 border-t border-dashed border-fuchsia-400/20 flex items-center justify-between font-mono-data text-[11px]">
+              <div className="p-4 border-t border-dashed border-fuchsia-400/20 flex flex-wrap items-center justify-between gap-3 font-mono-data text-[11px]">
+                <div className="flex items-center gap-3 text-slate-500">
+                  <span>
+                    MOSTRANDO {String(filteredAssets.length === 0 ? 0 : (paginaSegura - 1) * itemsPorPagina + 1).padStart(3, "0")}–
+                    {String(Math.min(paginaSegura * itemsPorPagina, filteredAssets.length)).padStart(3, "0")} DE {filteredAssets.length}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    MOSTRAR
+                    <select
+                      value={itemsPorPagina}
+                      onChange={(e) => {
+                        setItemsPorPagina(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="bg-[#0a0f1a] border border-fuchsia-400/20 text-slate-300 px-2 py-1 outline-none cursor-pointer focus:border-fuchsia-400 transition-colors"
+                    >
+                      {OPCIONES_TAMANO_PAGINA.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
                   <span className="text-slate-500">
                     PÁGINA {String(paginaSegura).padStart(2, "0")} / {String(totalPaginas).padStart(2, "0")}
                   </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={paginaSegura === 1}
-                      onClick={() => setCurrentPage(paginaSegura - 1)}
-                      className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
-                    >
-                      Anterior
-                    </button>
-                    <button
-                      type="button"
-                      disabled={paginaSegura === totalPaginas}
-                      onClick={() => setCurrentPage(paginaSegura + 1)}
-                      className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
-                    >
-                      Siguiente
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    disabled={paginaSegura === 1}
+                    onClick={() => setCurrentPage(paginaSegura - 1)}
+                    className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    type="button"
+                    disabled={paginaSegura === totalPaginas}
+                    onClick={() => setCurrentPage(paginaSegura + 1)}
+                    className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
+                  >
+                    Siguiente
+                  </button>
                 </div>
-              )}
+              </div>
             </section>
           </main>
         </>
@@ -2216,89 +2245,121 @@ function App() {
       {/* ========================================================================= */}
       {/* 👥 DIRECTORIO DE PERSONAL — CRUD individual (solo admin) */}
       {/* ========================================================================= */}
-      {currentView === "personal" && role === "admin" && (
-        <main className="max-w-5xl mx-auto p-6 space-y-6">
-          <div className="border border-fuchsia-400/25 bg-[#111827]">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-dashed border-fuchsia-400/20">
-              <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
-                {isEditingPerson ? "Editar colaborador" : "Alta de colaborador"}
-              </h2>
-            </div>
-            <form onSubmit={handlePersonSubmit} className="p-5 grid sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-              <div>
-                <label className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">
-                  Nombre completo
-                </label>
-                <input
-                  className="w-full p-2.5 bg-[#0a0f1a] border border-fuchsia-400/20 outline-none font-mono-data text-sm focus:border-fuchsia-400 transition-colors"
-                  placeholder="Juan Pérez"
-                  value={personForm.fullName}
-                  onChange={(e) =>
-                    setPersonForm({ ...personForm, fullName: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div>
-                <label className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">
-                  Área
-                </label>
-                <input
-                  className="w-full p-2.5 bg-[#0a0f1a] border border-fuchsia-400/20 outline-none font-mono-data text-sm focus:border-fuchsia-400 transition-colors"
-                  placeholder="TI"
-                  value={personForm.area}
-                  onChange={(e) =>
-                    setPersonForm({ ...personForm, area: e.target.value })
-                  }
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 bg-fuchsia-500 hover:bg-fuchsia-400 text-white font-mono-data text-xs font-bold uppercase tracking-widest cursor-pointer transition-colors"
-                >
-                  {isEditingPerson ? "Guardar" : "Agregar"}
-                </button>
-                {isEditingPerson && (
-                  <button
-                    type="button"
-                    onClick={cancelEditPerson}
-                    className="px-4 py-2.5 border border-fuchsia-400/20 text-slate-400 hover:text-white font-mono-data text-xs font-bold uppercase tracking-widest cursor-pointer transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>
+      {currentView === "personal" && role === "admin" && (() => {
+        const personasFiltradas = employeesDirectory.filter((p) =>
+          `${p.fullName} ${p.area}`
+            .toLowerCase()
+            .includes(personSearch.toLowerCase()),
+        );
+        const totalPaginasPersonal = Math.max(
+          1,
+          Math.ceil(personasFiltradas.length / personPageSize),
+        );
+        const personaPageSegura = Math.min(personPage, totalPaginasPersonal);
+        const personasPaginadas = personasFiltradas.slice(
+          (personaPageSegura - 1) * personPageSize,
+          personaPageSegura * personPageSize,
+        );
 
-          <div className="border border-fuchsia-400/25 bg-[#111827]">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-dashed border-fuchsia-400/20">
-              <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
-                Directorio de personal
-              </h2>
-              <span className="font-mono-data text-[10px] text-slate-500">
-                {employeesDirectory.length} registros
-              </span>
-            </div>
-            <div className="px-5 py-3 border-b border-dashed border-fuchsia-400/20">
-              <input
-                className="w-full p-2 bg-[#0a0f1a] border border-fuchsia-400/20 outline-none font-mono-data text-xs focus:border-fuchsia-400 transition-colors"
-                placeholder="Buscar colaborador o área…"
-                value={personSearch}
-                onChange={(e) => setPersonSearch(e.target.value)}
-              />
-            </div>
-            <div className="divide-y divide-dashed divide-fuchsia-400/10">
-              {employeesDirectory
-                .filter((p) =>
-                  `${p.fullName} ${p.area}`
-                    .toLowerCase()
-                    .includes(personSearch.toLowerCase()),
-                )
-                .map((persona) => (
+        return (
+          <main className="max-w-5xl mx-auto p-6">
+            <div className="relative border border-fuchsia-400/25 bg-[#111827]">
+              <span className="absolute -top-px -left-px w-2.5 h-2.5 border-t-2 border-l-2 border-fuchsia-400 pointer-events-none" />
+              <span className="absolute -top-px -right-px w-2.5 h-2.5 border-t-2 border-r-2 border-fuchsia-400 pointer-events-none" />
+
+              <div className="flex items-center justify-between px-5 py-3 border-b border-dashed border-fuchsia-400/20">
+                <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                  <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
+                  Directorio de personal
+                </h2>
+                <span className="font-mono-data text-[10px] text-slate-500">
+                  {personasFiltradas.length} registros
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-2 px-5 py-3 border-b border-dashed border-fuchsia-400/20">
+                <input
+                  className="flex-1 min-w-[200px] p-2 bg-[#0a0f1a] border border-fuchsia-400/20 outline-none font-mono-data text-xs focus:border-fuchsia-400 transition-colors"
+                  placeholder="Buscar colaborador o área…"
+                  value={personSearch}
+                  onChange={(e) => {
+                    setPersonSearch(e.target.value);
+                    setPersonPage(1);
+                  }}
+                />
+                <input
+                  type="file"
+                  accept=".csv"
+                  ref={personFileInputRef}
+                  onChange={handleBulkUploadEmployees}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => personFileInputRef.current?.click()}
+                  className="px-4 py-2 border border-fuchsia-400/20 text-slate-300 hover:text-white hover:border-fuchsia-400 font-mono-data text-[11px] font-bold uppercase tracking-widest cursor-pointer transition-colors"
+                >
+                  Cargar CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (mostrarFormPersona) {
+                      cancelEditPerson();
+                    } else {
+                      setMostrarFormPersona(true);
+                    }
+                  }}
+                  className="px-4 py-2 bg-fuchsia-500 hover:bg-fuchsia-400 text-white font-mono-data text-[11px] font-bold uppercase tracking-widest cursor-pointer transition-colors"
+                >
+                  {mostrarFormPersona ? "Cancelar" : "+ Agregar"}
+                </button>
+              </div>
+
+              {mostrarFormPersona && (
+                <form
+                  onSubmit={handlePersonSubmit}
+                  className="p-5 grid sm:grid-cols-[1fr_1fr_auto] gap-3 items-end border-b border-dashed border-fuchsia-400/20 bg-white/[0.01]"
+                >
+                  <div>
+                    <label className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">
+                      Nombre completo
+                    </label>
+                    <input
+                      className="w-full p-2.5 bg-[#0a0f1a] border border-fuchsia-400/20 outline-none font-mono-data text-sm focus:border-fuchsia-400 transition-colors"
+                      placeholder="Juan Pérez"
+                      value={personForm.fullName}
+                      onChange={(e) =>
+                        setPersonForm({ ...personForm, fullName: e.target.value })
+                      }
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">
+                      Área
+                    </label>
+                    <input
+                      className="w-full p-2.5 bg-[#0a0f1a] border border-fuchsia-400/20 outline-none font-mono-data text-sm focus:border-fuchsia-400 transition-colors"
+                      placeholder="TI"
+                      value={personForm.area}
+                      onChange={(e) =>
+                        setPersonForm({ ...personForm, area: e.target.value })
+                      }
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-fuchsia-500 hover:bg-fuchsia-400 text-white font-mono-data text-xs font-bold uppercase tracking-widest cursor-pointer transition-colors"
+                  >
+                    {isEditingPerson ? "Guardar" : "Agregar"}
+                  </button>
+                </form>
+              )}
+
+              <div className="divide-y divide-dashed divide-fuchsia-400/10">
+                {personasPaginadas.map((persona) => (
                   <div
                     key={persona.id}
                     className="flex items-center gap-4 px-5 py-3 hover:bg-white/[0.02] transition-colors"
@@ -2320,14 +2381,14 @@ function App() {
                     <div className="flex gap-1">
                       <button
                         onClick={() => startEditPerson(persona)}
-                        className="p-1.5 text-yellow-500 hover:bg-yellow-500/10 transition-colors cursor-pointer"
+                        className="p-1.5 text-slate-500 hover:text-white transition-colors cursor-pointer"
                         title="Editar"
                       >
                         <Pencil size={14} />
                       </button>
                       <button
                         onClick={() => deletePerson(persona)}
-                        className="p-1.5 text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                        className="p-1.5 text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
                         title="Eliminar"
                       >
                         <Trash2 size={14} />
@@ -2335,15 +2396,65 @@ function App() {
                     </div>
                   </div>
                 ))}
-              {employeesDirectory.length === 0 && (
-                <div className="px-5 py-10 text-center font-mono-data text-xs text-slate-500">
-                  Sin colaboradores registrados todavía.
+                {personasFiltradas.length === 0 && (
+                  <div className="px-5 py-10 text-center font-mono-data text-xs text-slate-500">
+                    Sin colaboradores registrados todavía.
+                  </div>
+                )}
+              </div>
+
+              {personasFiltradas.length > 0 && (
+                <div className="p-4 border-t border-dashed border-fuchsia-400/20 flex flex-wrap items-center justify-between gap-3 font-mono-data text-[11px]">
+                  <div className="flex items-center gap-3 text-slate-500">
+                    <span>
+                      MOSTRANDO {String((personaPageSegura - 1) * personPageSize + 1).padStart(3, "0")}–
+                      {String(Math.min(personaPageSegura * personPageSize, personasFiltradas.length)).padStart(3, "0")} DE {personasFiltradas.length}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      MOSTRAR
+                      <select
+                        value={personPageSize}
+                        onChange={(e) => {
+                          setPersonPageSize(Number(e.target.value));
+                          setPersonPage(1);
+                        }}
+                        className="bg-[#0a0f1a] border border-fuchsia-400/20 text-slate-300 px-2 py-1 outline-none cursor-pointer focus:border-fuchsia-400 transition-colors"
+                      >
+                        {OPCIONES_TAMANO_PAGINA.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500">
+                      PÁGINA {String(personaPageSegura).padStart(2, "0")} / {String(totalPaginasPersonal).padStart(2, "0")}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={personaPageSegura === 1}
+                      onClick={() => setPersonPage(personaPageSegura - 1)}
+                      className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      type="button"
+                      disabled={personaPageSegura === totalPaginasPersonal}
+                      onClick={() => setPersonPage(personaPageSegura + 1)}
+                      className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
-          </div>
-        </main>
-      )}
+          </main>
+        );
+      })()}
 
       {/* ========================================================================= */}
       {/* 🔐 SESIONES ACTIVAS (solo admin) */}
