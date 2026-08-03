@@ -283,6 +283,12 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+// Endpoint ligero para que el cliente verifique periódicamente que la
+// cuenta sigue activa (verificarToken ya rechaza cuentas suspendidas).
+app.get("/api/auth/me", verificarToken, (req, res) => {
+  res.json({ ok: true });
+});
+
 app.post("/api/auth/forgot-password", async (req, res) => {
   try {
     const { email, newPassword } = req.body;

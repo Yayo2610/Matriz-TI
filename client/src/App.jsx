@@ -34,8 +34,19 @@ import { AuthContext } from "./context/AuthContext";
 const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function App() {
-  const { token, role, nombre, apellido, tienePermiso, login, logout } =
-    useContext(AuthContext);
+  const {
+    token,
+    role,
+    nombre,
+    apellido,
+    tienePermiso,
+    login,
+    logout,
+    sesionExpirada,
+    limpiarSesionExpirada,
+    cuentaSuspendida,
+    limpiarCuentaSuspendida,
+  } = useContext(AuthContext);
 
   // --- ESTADOS LOCALES ---
   const [assets, setAssets] = useState([]);
@@ -609,6 +620,29 @@ function App() {
             )}
           </div>
 
+          {cuentaSuspendida && authView === "login" ? (
+            <div className="mb-6 text-center">
+              <p className="text-xl font-black text-red-400">
+                Tu cuenta fue suspendida
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Contacta a un administrador para más información
+              </p>
+            </div>
+          ) : (
+            sesionExpirada &&
+            authView === "login" && (
+              <div className="mb-6 text-center">
+                <p className="text-xl font-black text-amber-400">
+                  Tu sesión se cerró por inactividad
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Vuelve a iniciar sesión para continuar
+                </p>
+              </div>
+            )
+          )}
+
           {authView === "login" ? (
             <>
               <form
@@ -650,6 +684,8 @@ function App() {
                   value={loginCredentials.email}
                   onChange={(e) => {
                     setLoginError("");
+                    limpiarSesionExpirada();
+                    limpiarCuentaSuspendida();
                     setLoginCredentials({
                       ...loginCredentials,
                       email: e.target.value,
@@ -669,6 +705,8 @@ function App() {
                     value={loginCredentials.password}
                     onChange={(e) => {
                       setLoginError("");
+                      limpiarSesionExpirada();
+                      limpiarCuentaSuspendida();
                       setLoginCredentials({
                         ...loginCredentials,
                         password: e.target.value,
