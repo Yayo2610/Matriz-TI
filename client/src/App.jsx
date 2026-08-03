@@ -153,6 +153,7 @@ function App() {
 
   const API_URL = "https://matriz-ti-backend.onrender.com/api/assets";
   const AUTH_URL = "https://matriz-ti-backend.onrender.com/api/auth";
+  const EMPLOYEES_URL = "https://matriz-ti-backend.onrender.com/api/employees";
   const clientConfig = { headers: { Authorization: `Bearer ${token}` } };
 
   const [form, setForm] = useState({
@@ -339,47 +340,50 @@ function App() {
       );
     }
   };
-  // 👥 PROPUESTA 2: Procesador de Importación del Directorio de Personal (Nómina en CSV)
-  const handleBulkUploadEmployees = (e) => {
+  // 👥 Directorio de Personal (Nómina en CSV) — se guarda en el backend para
+  // que quede disponible para todos los usuarios, no solo quien lo sube.
+  const fetchEmployees = async () => {
+    try {
+      const res = await axios.get(EMPLOYEES_URL, clientConfig);
+      setEmployeesDirectory(
+        res.data.map((emp) => ({ ...emp, id: emp._id })),
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleBulkUploadEmployees = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target.result;
-      const lines = text.split("\n");
-      const deptoPersonal = [];
+    const formData = new FormData();
+    formData.append("file", file);
 
-      // Cabecera omitida -> Formato esperado: Nombre,Apellido,Puesto_O_Area
-      for (let i = 1; i < lines.length; i++) {
-        const row = lines[i].trim();
-        if (!row) continue;
-
-        const columns = row.split(",");
-        if (columns.length >= 3) {
-          deptoPersonal.push({
-            id: `emp-${Date.now()}-${i}`,
-            fullName: `${columns[0]?.trim()} ${columns[1]?.trim()}`,
-            area: columns[2]?.trim() || "General",
-          });
-        }
-      }
-
-      if (deptoPersonal.length > 0) {
-        setEmployeesDirectory(deptoPersonal);
-        pushToast(
-          `Directorio sincronizado: se precargaron ${deptoPersonal.length} colaboradores en el sistema. Los campos de asignación manual ahora están automatizados.`,
-          "success",
-        );
-        setRegisterMode("manual");
-      } else {
-        pushToast(
-          "El archivo de personal no contiene datos estructurados válidos.",
-          "error",
-        );
-      }
-    };
-    reader.readAsText(file);
+    try {
+      const response = await axios.post(`${EMPLOYEES_URL}/bulk`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      pushToast(
+        response.data.message || "Directorio de personal actualizado.",
+        "success",
+      );
+      fetchEmployees();
+      setRegisterMode("manual");
+      e.target.value = "";
+    } catch (err) {
+      console.error(
+        "Error al subir el directorio de personal:",
+        err.response?.data || err.message,
+      );
+      pushToast(
+        `Error al subir el archivo: ${err.response?.data?.error || "Revisa la consola"}`,
+        "error",
+      );
+    }
   };
 
   const handleStatusChange = async (id, newStatus) => {
@@ -677,6 +681,10 @@ function App() {
 
   useEffect(() => {
     if (token) fetchAssets();
+  }, [token]);
+
+  useEffect(() => {
+    if (token) fetchEmployees();
   }, [token]);
 
   useEffect(() => {

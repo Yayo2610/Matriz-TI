@@ -204,6 +204,14 @@ const AssetSchema = new mongoose.Schema({
 
 const Asset = mongoose.models.Asset || mongoose.model("Asset", AssetSchema);
 
+const EmployeeSchema = new mongoose.Schema({
+  fullName: { type: String, required: true },
+  area: { type: String, default: "General" },
+});
+
+const Employee =
+  mongoose.models.Employee || mongoose.model("Employee", EmployeeSchema);
+
 // ==========================================
 // 🔑 RUTAS DE AUTENTICACIÓN
 // ==========================================
@@ -711,6 +719,78 @@ app.post(
     }
     res.status(500).json({ success: false, error: error.message });
   }
+  },
+);
+
+// ==========================================
+// 👥 DIRECTORIO DE PERSONAL (NÓMINA)
+// ==========================================
+app.get(
+  "/api/employees",
+  verificarToken,
+  verificarPermiso("lectura"),
+  async (req, res) => {
+    try {
+      const empleados = await Employee.find();
+      res.json(empleados);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+
+// Reemplaza el directorio completo por el contenido del CSV subido, para
+// que quede disponible para todos los usuarios (antes solo vivía en la
+// memoria del navegador de quien lo subía).
+app.post(
+  "/api/employees/bulk",
+  verificarToken,
+  verificarPermiso("escritura"),
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: "No se recibió ningún archivo.",
+        });
+      }
+
+      const texto = req.file.buffer.toString("utf8");
+      const lineas = texto.split("\n");
+      const empleados = [];
+
+      // Cabecera omitida -> Formato esperado: Nombre,Apellido,Puesto_O_Area
+      for (let i = 1; i < lineas.length; i++) {
+        const fila = lineas[i].trim();
+        if (!fila) continue;
+
+        const columnas = fila.split(",");
+        if (columnas.length >= 3) {
+          const fullName = `${columnas[0]?.trim() || ""} ${columnas[1]?.trim() || ""}`.trim();
+          const area = columnas[2]?.trim() || "General";
+          if (fullName) empleados.push({ fullName, area });
+        }
+      }
+
+      if (empleados.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "El archivo de personal no contiene datos estructurados válidos.",
+        });
+      }
+
+      await Employee.deleteMany({});
+      const inserted = await Employee.insertMany(empleados);
+
+      res.status(201).json({
+        success: true,
+        message: `Directorio actualizado: se precargaron ${inserted.length} colaboradores.`,
+        data: inserted,
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   },
 );
 
