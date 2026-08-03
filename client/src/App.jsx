@@ -727,7 +727,7 @@ function App() {
                     )}
                   </button>
                 </div>
-                {loginError && (
+                {loginError && !cuentaSuspendida && (
                   <p className="text-red-400 text-sm text-center -mt-1">
                     {loginError}
                   </p>
