@@ -89,19 +89,32 @@ export const AuthProvider = ({ children }) => {
     return () => axios.interceptors.response.eject(interceptorId);
   }, [logout]);
 
-  // Chequeo periódico en segundo plano: cubre el caso de un usuario
-  // inactivo (sin hacer peticiones) al que el admin le suspende la cuenta.
+  // Sincroniza rol/permisos/nombre con la base de datos: se ejecuta al
+  // cargar/recargar la página y luego cada 30s, para que un cambio hecho
+  // por el admin (rol, permisos, suspensión) se aplique sin re-loguearse.
   useEffect(() => {
     if (!token) return;
 
-    const verificarCuentaActiva = () => {
+    const sincronizarPerfil = () => {
       axios
         .get(`${AUTH_URL}/me`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((res) => {
+          const { role: rolActual, permisos: permisosActuales, nombre: nombreActual, apellido: apellidoActual } = res.data;
+          localStorage.setItem("role", rolActual);
+          localStorage.setItem("permisos", JSON.stringify(permisosActuales));
+          localStorage.setItem("nombre", nombreActual || "");
+          localStorage.setItem("apellido", apellidoActual || "");
+          setRole(rolActual);
+          setPermisos(permisosActuales);
+          setNombre(nombreActual || "");
+          setApellido(apellidoActual || "");
+        })
         .catch(() => {}); // el interceptor de arriba ya maneja el caso de suspensión
     };
 
+    sincronizarPerfil();
     const intervalId = setInterval(
-      verificarCuentaActiva,
+      sincronizarPerfil,
       INTERVALO_VERIFICACION_CUENTA_MS,
     );
     return () => clearInterval(intervalId);

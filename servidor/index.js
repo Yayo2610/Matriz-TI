@@ -50,15 +50,25 @@ const verificarToken = async (req, res, next) => {
     );
 
     // Se revisa el estado real en la base en cada petición para que una
-    // cuenta suspendida pierda el acceso de inmediato, no hasta que expire el token.
-    const cuenta = await User.findById(decoded.id).select("activo");
+    // cuenta suspendida pierda el acceso de inmediato, y para que un cambio
+    // de rol/permisos hecho por el admin aplique sin esperar a un nuevo login
+    // (el token puede traer datos desactualizados si se editó la cuenta después).
+    const cuenta = await User.findById(decoded.id).select(
+      "role permisos activo nombre apellido",
+    );
     if (!cuenta || cuenta.activo === false) {
       return res.status(403).json({
         error: "Cuenta suspendida. Contacta a un administrador.",
       });
     }
 
-    req.user = decoded;
+    req.user = {
+      id: decoded.id,
+      role: cuenta.role,
+      permisos: cuenta.permisos,
+      nombre: cuenta.nombre,
+      apellido: cuenta.apellido,
+    };
     next();
   } catch (err) {
     return res.status(403).json({ error: "Token inválido o expirado" });
@@ -283,10 +293,16 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// Endpoint ligero para que el cliente verifique periódicamente que la
-// cuenta sigue activa (verificarToken ya rechaza cuentas suspendidas).
+// Endpoint ligero para que el cliente verifique periódicamente que la cuenta
+// sigue activa (verificarToken ya rechaza cuentas suspendidas) y para
+// refrescar rol/permisos actualizados al cargar o recargar la página.
 app.get("/api/auth/me", verificarToken, (req, res) => {
-  res.json({ ok: true });
+  res.json({
+    role: req.user.role,
+    permisos: req.user.permisos,
+    nombre: req.user.nombre,
+    apellido: req.user.apellido,
+  });
 });
 
 app.post("/api/auth/forgot-password", async (req, res) => {
