@@ -4,7 +4,6 @@ import {
   Trash2,
   Laptop,
   LogOut,
-  PlusCircle,
   ShieldCheck,
   Pencil,
   X,
@@ -1165,7 +1164,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-[#0a0f1a] text-slate-300 font-sans relative">
-      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(232,121,249,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(232,121,249,0.035)_1px,transparent_1px)] bg-[size:44px_44px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,black_0%,transparent_75%)]" />
+      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(232,121,249,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(232,121,249,0.14)_1px,transparent_1px)] bg-[size:28px_28px]" />
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       <ConfirmModal
         dialog={confirmDialog}
@@ -1306,6 +1305,348 @@ function App() {
             <DashboardGrid actualizarMetricas={actualizarMetricas} />
           </div>
           <main className="max-w-7xl mx-auto p-6 grid lg:grid-cols-12 gap-9">
+            <section
+              className={`${tienePermiso("escritura") ? "lg:col-span-9" : "lg:col-span-12"} relative bg-[#111827] border border-fuchsia-400/25 overflow-hidden`}
+            >
+              <span className="absolute -top-px -left-px w-2.5 h-2.5 border-t-2 border-l-2 border-fuchsia-400 pointer-events-none z-10" />
+              <span className="absolute -top-px -right-px w-2.5 h-2.5 border-t-2 border-r-2 border-fuchsia-400 pointer-events-none z-10" />
+              <div className="px-6 py-4 border-b border-dashed border-fuchsia-400/20 flex justify-between items-center bg-white/[0.01]">
+                <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                  <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
+                  Manifiesto de inventario
+                </h2>
+                <div className="flex items-center gap-4">
+                  <span className="font-mono-data text-fuchsia-400 text-xs font-bold">
+                    {filteredAssets.length} registros
+                  </span>
+                  {role === "admin" && (
+                    <>
+                      <div className="w-px h-6 bg-fuchsia-400/15" />
+                      <button
+                        onClick={handleDeleteAllAssets}
+                        className="flex items-center gap-2 bg-transparent hover:bg-red-600/10 border border-red-500/30 text-red-400/80 hover:text-red-400 px-3 py-1.5 font-mono-data text-[11px] font-bold uppercase tracking-wider transition-colors"
+                      >
+                        <Trash2 size={14} />
+                        Eliminar todos
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* FILTROS ORIGINALES */}
+              <div className="p-4 bg-[#0a0f1a] border-b border-dashed border-fuchsia-400/20 grid grid-cols-1 md:grid-cols-3 gap-3 w-full">
+                <div className="relative">
+                  <Search
+                    size={14}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder="BUSCAR S/N · MARCA · MODELO"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full pl-10 pr-4 py-2.5 bg-[#111827] font-mono-data outline-none text-xs text-slate-200 border border-fuchsia-400/20 focus:border-fuchsia-400 transition-colors"
+                  />
+                </div>
+                <div className="relative">
+                  <select
+                    value={filterType}
+                    onChange={(e) => {
+                      setFilterType(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full pl-4 pr-10 py-2.5 bg-[#111827] outline-none text-xs text-slate-300 border border-fuchsia-400/20 focus:border-fuchsia-400 cursor-pointer appearance-none transition-colors"
+                  >
+                    <option value="Todos">Todos los tipos</option>
+                    <option value="Desktop">Desktop</option>
+                    <option value="Laptop">Laptop</option>
+                    <option value="Celular">Celulares</option>
+                    <option value="Monitor">Monitores</option>
+                    <option value="Impresora">Impresoras</option>
+                    <option value="Impresora de Etiquetas">
+                      Impresoras de Etiquetas
+                    </option>
+                    <option value="Access Point">Access Points</option>
+                    <option value="Switch">Switches</option>
+                    <option value="Router">Routers</option>
+                    <option value="Servidor">Servidores</option>
+                    <option value="ONT">ONT</option>
+                    <option value="Firewall">Firewalls</option>
+                    <option value="UPS">UPS</option>
+                    <option value="Periferico">Periféricos</option>
+                    <option value="Otro">Otros Equipos</option>
+                  </select>
+                  <ChevronDown
+                    size={14}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+                  />
+                </div>
+                <div className="relative">
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => {
+                      setFilterStatus(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full pl-4 pr-10 py-2.5 bg-[#111827] outline-none text-xs text-slate-300 border border-fuchsia-400/20 focus:border-fuchsia-400 cursor-pointer appearance-none transition-colors"
+                  >
+                    <option value="Todos">Todos los estados</option>
+                    <option value="En Stock">En Stock</option>
+                    <option value="Asignado">Asignado</option>
+                    <option value="En Mantenimiento">En Mantenimiento</option>
+                  </select>
+                  <ChevronDown
+                    size={14}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+                  />
+                </div>
+              </div>
+
+              <div className="max-w-full overflow-x-auto">
+                <table className="w-full table-auto">
+                  <thead className="text-slate-500 text-[9px] font-mono-data font-bold uppercase tracking-[0.15em] border-b border-fuchsia-400/20">
+                    <tr>
+                      <th className="px-6 py-3 text-left">Equipo</th>
+                      <th className="px-6 py-3 text-left">Tipo</th>
+                      <th className="px-6 py-3 text-left">Serial</th>
+                      <th className="px-6 py-3 text-left whitespace-nowrap">
+                        Titular
+                      </th>
+                      <th className="px-6 py-3 text-left">Área</th>
+                      <th className="px-6 py-3 text-right whitespace-nowrap">
+                        Estado
+                      </th>
+                      <th className="px-6 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-dashed divide-fuchsia-400/10">
+                    {assetsLoading ? (
+                      Array.from({ length: 8 }).map((_, idx) => (
+                        <tr key={`skeleton-${idx}`} className="animate-pulse">
+                          <td className="px-6 py-4">
+                            <div className="h-3 w-24 bg-white/10 rounded mb-2" />
+                            <div className="h-2.5 w-16 bg-white/5 rounded" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="h-5 w-16 bg-white/10 rounded-lg" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="h-3 w-20 bg-white/10 rounded" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="h-3 w-28 bg-white/10 rounded" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="h-3 w-24 bg-white/10 rounded" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="h-7 w-24 bg-white/10 rounded-xl ml-auto" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="h-6 w-14 bg-white/10 rounded-xl ml-auto" />
+                          </td>
+                        </tr>
+                      ))
+                    ) : filteredAssets.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-16">
+                          <div className="flex flex-col items-center gap-3 text-center">
+                            <div className="p-4 bg-white/5 rounded-full">
+                              <PackageOpen size={28} className="text-slate-600" />
+                            </div>
+                            <p className="text-sm font-bold text-slate-400">
+                              No hay activos que coincidan
+                            </p>
+                            <p className="text-xs text-slate-600 max-w-xs">
+                              Ajusta los filtros de búsqueda o registra un
+                              nuevo equipo desde el panel izquierdo.
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedAssets.map((a) => (
+                      <tr
+                        key={a._id}
+                        className="hover:bg-white/[0.03] transition text-xs"
+                      >
+                        <td className="px-6 py-3.5">
+                          <div className="text-white font-bold capitalize">
+                            {a.brand}
+                          </div>
+                          <div className="text-[10.5px] text-slate-500 uppercase">
+                            {a.model}
+                          </div>
+                        </td>
+                        <td className="px-6 py-3.5">
+                          <span className="border border-fuchsia-400/20 text-slate-300 px-2.5 py-1 font-mono-data text-[9.5px] font-bold uppercase tracking-wider">
+                            {a.type === "Otro" && a.typeOther
+                              ? a.typeOther
+                              : a.type || "Sin definir"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3.5">
+                          <span className="inline-flex items-center gap-2 font-mono-data text-[11px] text-fuchsia-300">
+                            <span
+                              className="inline-block w-4 h-3 opacity-70"
+                              style={{
+                                backgroundImage:
+                                  "repeating-linear-gradient(90deg, currentColor 0 1.5px, transparent 1.5px 3.5px)",
+                              }}
+                            />
+                            {a.serialNumber}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3.5 text-slate-300 capitalize font-mono-data">
+                          {(a.status || "En Stock") === "En Stock" ? (
+                            <span className="text-slate-600 italic font-sans">
+                              Sin Asignar
+                            </span>
+                          ) : (
+                            a.assignedTo || "N/A"
+                          )}
+                        </td>
+                        <td className="px-6 py-3.5 text-slate-300 uppercase max-w-[160px]">
+                          {(a.status || "En Stock") === "En Stock" ? (
+                            <span className="text-slate-600 italic">—</span>
+                          ) : (
+                            <span
+                              className="block truncate"
+                              title={a.department || "N/A"}
+                            >
+                              {a.department || "N/A"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-3.5 text-right">
+                          <div className="relative inline-block">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                              {(a.status || "En Stock") === "En Stock" ? (
+                                <PackageOpen
+                                  size={12}
+                                  className="text-blue-400"
+                                />
+                              ) : (a.status || "En Stock") ===
+                                "Asignado" ? (
+                                <UserCheck
+                                  size={12}
+                                  className="text-emerald-400"
+                                />
+                              ) : (
+                                <Wrench
+                                  size={12}
+                                  className="text-orange-400"
+                                />
+                              )}
+                            </span>
+                            <select
+                              disabled={!tienePermiso("modificacion")}
+                              value={a.status || "En Stock"}
+                              onChange={(e) =>
+                                handleStatusChange(a._id, e.target.value)
+                              }
+                              className={`pl-8 pr-3 py-1.5 font-mono-data text-[10.5px] font-bold border outline-none cursor-pointer ${(a.status || "En Stock") === "En Stock" ? "bg-blue-600/10 text-blue-400 border-blue-500/30" : (a.status || "En Stock") === "Asignado" ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/30" : "bg-orange-600/10 text-orange-400 border-orange-500/30"}`}
+                            >
+                              <option
+                                value="En Stock"
+                                className="bg-[#1f2937]"
+                              >
+                                En Stock
+                              </option>
+                              <option
+                                value="Asignado"
+                                className="bg-[#1f2937]"
+                              >
+                                Asignado
+                              </option>
+                              <option
+                                value="En Mantenimiento"
+                                className="bg-[#1f2937]"
+                              >
+                                Mantenimiento
+                              </option>
+                            </select>
+                          </div>
+                        </td>
+                        <td className="px-6 py-3.5 text-right">
+                          {tienePermiso("modificacion") && (
+                            <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                              <button
+                                onClick={() => startEdit(a)}
+                                className="text-slate-500 p-1.5 hover:text-white transition-colors cursor-pointer"
+                                title="Editar"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => deleteAsset(a._id)}
+                                className="text-slate-500 p-1.5 hover:text-red-400 transition-colors cursor-pointer"
+                                title="Eliminar"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="p-4 border-t border-dashed border-fuchsia-400/20 flex flex-wrap items-center justify-between gap-3 font-mono-data text-[11px]">
+                <div className="flex items-center gap-3 text-slate-500">
+                  <span>
+                    MOSTRANDO {String(filteredAssets.length === 0 ? 0 : (paginaSegura - 1) * itemsPorPagina + 1).padStart(3, "0")}–
+                    {String(Math.min(paginaSegura * itemsPorPagina, filteredAssets.length)).padStart(3, "0")} DE {filteredAssets.length}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    MOSTRAR
+                    <select
+                      value={itemsPorPagina}
+                      onChange={(e) => {
+                        setItemsPorPagina(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="bg-[#0a0f1a] border border-fuchsia-400/20 text-slate-300 px-2 py-1 outline-none cursor-pointer focus:border-fuchsia-400 transition-colors"
+                    >
+                      {OPCIONES_TAMANO_PAGINA.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">
+                    PÁGINA {String(paginaSegura).padStart(2, "0")} / {String(totalPaginas).padStart(2, "0")}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={paginaSegura === 1}
+                    onClick={() => setCurrentPage(paginaSegura - 1)}
+                    className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    type="button"
+                    disabled={paginaSegura === totalPaginas}
+                    onClick={() => setCurrentPage(paginaSegura + 1)}
+                    className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </section>
+
             {tienePermiso("escritura") && (
               /* --- ESTE ES EL PANEL LATERAL CON LA MEJORA VISUAL EXACTA --- */
               <aside className="lg:col-span-3">
@@ -1342,12 +1683,8 @@ function App() {
                     {registerMode === "manual" ? (
                       /* TU FORMULARIO ORIGINAL INTACTO */
                       <form onSubmit={handleSubmit} className="space-y-3">
-                        <h2 className="text-xs font-bold text-white flex items-center gap-2 mb-4">
-                          {isEditing ? (
-                            <Pencil className="text-yellow-500" size={16} />
-                          ) : (
-                            <PlusCircle className="text-fuchsia-400" size={16} />
-                          )}
+                        <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2 mb-4">
+                          <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
                           {isEditing ? "Editar Activo" : "Alta Rápida"}
                         </h2>
                         <div className="space-y-1">
@@ -1585,348 +1922,6 @@ function App() {
                 </div>
               </aside>
             )}
-
-            <section
-              className={`${tienePermiso("escritura") ? "lg:col-span-9" : "lg:col-span-12"} relative bg-[#111827] border border-fuchsia-400/25 overflow-hidden`}
-            >
-              <span className="absolute -top-px -left-px w-2.5 h-2.5 border-t-2 border-l-2 border-fuchsia-400 pointer-events-none z-10" />
-              <span className="absolute -top-px -right-px w-2.5 h-2.5 border-t-2 border-r-2 border-fuchsia-400 pointer-events-none z-10" />
-              <div className="px-6 py-4 border-b border-dashed border-fuchsia-400/20 flex justify-between items-center bg-white/[0.01]">
-                <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                  <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
-                  Manifiesto de inventario
-                </h2>
-                <div className="flex items-center gap-4">
-                  <span className="font-mono-data text-fuchsia-400 text-xs font-bold">
-                    {filteredAssets.length} registros
-                  </span>
-                  {role === "admin" && (
-                    <>
-                      <div className="w-px h-6 bg-fuchsia-400/15" />
-                      <button
-                        onClick={handleDeleteAllAssets}
-                        className="flex items-center gap-2 bg-transparent hover:bg-red-600/10 border border-red-500/30 text-red-400/80 hover:text-red-400 px-3 py-1.5 font-mono-data text-[11px] font-bold uppercase tracking-wider transition-colors"
-                      >
-                        <Trash2 size={14} />
-                        Eliminar todos
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* FILTROS ORIGINALES */}
-              <div className="p-4 bg-[#0a0f1a] border-b border-dashed border-fuchsia-400/20 grid grid-cols-1 md:grid-cols-3 gap-3 w-full">
-                <div className="relative">
-                  <Search
-                    size={14}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"
-                  />
-                  <input
-                    type="text"
-                    placeholder="BUSCAR S/N · MARCA · MODELO"
-                    value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="w-full pl-10 pr-4 py-2.5 bg-[#111827] font-mono-data outline-none text-xs text-slate-200 border border-fuchsia-400/20 focus:border-fuchsia-400 transition-colors"
-                  />
-                </div>
-                <div className="relative">
-                  <select
-                    value={filterType}
-                    onChange={(e) => {
-                      setFilterType(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="w-full pl-4 pr-10 py-2.5 bg-[#111827] outline-none text-xs text-slate-300 border border-fuchsia-400/20 focus:border-fuchsia-400 cursor-pointer appearance-none transition-colors"
-                  >
-                    <option value="Todos">Todos los tipos</option>
-                    <option value="Desktop">Desktop</option>
-                    <option value="Laptop">Laptop</option>
-                    <option value="Celular">Celulares</option>
-                    <option value="Monitor">Monitores</option>
-                    <option value="Impresora">Impresoras</option>
-                    <option value="Impresora de Etiquetas">
-                      Impresoras de Etiquetas
-                    </option>
-                    <option value="Access Point">Access Points</option>
-                    <option value="Switch">Switches</option>
-                    <option value="Router">Routers</option>
-                    <option value="Servidor">Servidores</option>
-                    <option value="ONT">ONT</option>
-                    <option value="Firewall">Firewalls</option>
-                    <option value="UPS">UPS</option>
-                    <option value="Periferico">Periféricos</option>
-                    <option value="Otro">Otros Equipos</option>
-                  </select>
-                  <ChevronDown
-                    size={14}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
-                  />
-                </div>
-                <div className="relative">
-                  <select
-                    value={filterStatus}
-                    onChange={(e) => {
-                      setFilterStatus(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="w-full pl-4 pr-10 py-2.5 bg-[#111827] outline-none text-xs text-slate-300 border border-fuchsia-400/20 focus:border-fuchsia-400 cursor-pointer appearance-none transition-colors"
-                  >
-                    <option value="Todos">Todos los estados</option>
-                    <option value="En Stock">En Stock</option>
-                    <option value="Asignado">Asignado</option>
-                    <option value="En Mantenimiento">En Mantenimiento</option>
-                  </select>
-                  <ChevronDown
-                    size={14}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
-                  />
-                </div>
-              </div>
-
-              <div className="max-w-full overflow-x-auto">
-                <table className="w-full table-auto">
-                  <thead className="text-slate-500 text-[9px] font-mono-data font-bold uppercase tracking-[0.15em] border-b border-fuchsia-400/20">
-                    <tr>
-                      <th className="px-6 py-3 text-left">Hardware</th>
-                      <th className="px-6 py-3 text-left">Tipo</th>
-                      <th className="px-6 py-3 text-left">Serial</th>
-                      <th className="px-6 py-3 text-left whitespace-nowrap">
-                        Titular
-                      </th>
-                      <th className="px-6 py-3 text-left">Área</th>
-                      <th className="px-6 py-3 text-right whitespace-nowrap">
-                        Estado
-                      </th>
-                      <th className="px-6 py-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-dashed divide-fuchsia-400/10">
-                    {assetsLoading ? (
-                      Array.from({ length: 8 }).map((_, idx) => (
-                        <tr key={`skeleton-${idx}`} className="animate-pulse">
-                          <td className="px-6 py-4">
-                            <div className="h-3 w-24 bg-white/10 rounded mb-2" />
-                            <div className="h-2.5 w-16 bg-white/5 rounded" />
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="h-5 w-16 bg-white/10 rounded-lg" />
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="h-3 w-20 bg-white/10 rounded" />
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="h-3 w-28 bg-white/10 rounded" />
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="h-3 w-24 bg-white/10 rounded" />
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="h-7 w-24 bg-white/10 rounded-xl ml-auto" />
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="h-6 w-14 bg-white/10 rounded-xl ml-auto" />
-                          </td>
-                        </tr>
-                      ))
-                    ) : filteredAssets.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="px-6 py-16">
-                          <div className="flex flex-col items-center gap-3 text-center">
-                            <div className="p-4 bg-white/5 rounded-full">
-                              <PackageOpen size={28} className="text-slate-600" />
-                            </div>
-                            <p className="text-sm font-bold text-slate-400">
-                              No hay activos que coincidan
-                            </p>
-                            <p className="text-xs text-slate-600 max-w-xs">
-                              Ajusta los filtros de búsqueda o registra un
-                              nuevo equipo desde el panel izquierdo.
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      paginatedAssets.map((a) => (
-                      <tr
-                        key={a._id}
-                        className="hover:bg-white/[0.03] transition text-xs"
-                      >
-                        <td className="px-6 py-3.5">
-                          <div className="text-white font-bold capitalize">
-                            {a.brand}
-                          </div>
-                          <div className="text-[10.5px] text-slate-500 uppercase">
-                            {a.model}
-                          </div>
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <span className="border border-fuchsia-400/20 text-slate-300 px-2.5 py-1 font-mono-data text-[9.5px] font-bold uppercase tracking-wider">
-                            {a.type === "Otro" && a.typeOther
-                              ? a.typeOther
-                              : a.type || "Sin definir"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <span className="inline-flex items-center gap-2 font-mono-data text-[11px] text-fuchsia-300">
-                            <span
-                              className="inline-block w-4 h-3 opacity-70"
-                              style={{
-                                backgroundImage:
-                                  "repeating-linear-gradient(90deg, currentColor 0 1.5px, transparent 1.5px 3.5px)",
-                              }}
-                            />
-                            {a.serialNumber}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5 text-slate-300 capitalize font-mono-data">
-                          {(a.status || "En Stock") === "En Stock" ? (
-                            <span className="text-slate-600 italic font-sans">
-                              Sin Asignar
-                            </span>
-                          ) : (
-                            a.assignedTo || "N/A"
-                          )}
-                        </td>
-                        <td className="px-6 py-3.5 text-slate-300 uppercase max-w-[160px]">
-                          {(a.status || "En Stock") === "En Stock" ? (
-                            <span className="text-slate-600 italic">—</span>
-                          ) : (
-                            <span
-                              className="block truncate"
-                              title={a.department || "N/A"}
-                            >
-                              {a.department || "N/A"}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <div className="relative inline-block">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                              {(a.status || "En Stock") === "En Stock" ? (
-                                <PackageOpen
-                                  size={12}
-                                  className="text-blue-400"
-                                />
-                              ) : (a.status || "En Stock") ===
-                                "Asignado" ? (
-                                <UserCheck
-                                  size={12}
-                                  className="text-emerald-400"
-                                />
-                              ) : (
-                                <Wrench
-                                  size={12}
-                                  className="text-orange-400"
-                                />
-                              )}
-                            </span>
-                            <select
-                              disabled={!tienePermiso("modificacion")}
-                              value={a.status || "En Stock"}
-                              onChange={(e) =>
-                                handleStatusChange(a._id, e.target.value)
-                              }
-                              className={`pl-8 pr-3 py-1.5 font-mono-data text-[10.5px] font-bold border outline-none cursor-pointer ${(a.status || "En Stock") === "En Stock" ? "bg-blue-600/10 text-blue-400 border-blue-500/30" : (a.status || "En Stock") === "Asignado" ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/30" : "bg-orange-600/10 text-orange-400 border-orange-500/30"}`}
-                            >
-                              <option
-                                value="En Stock"
-                                className="bg-[#1f2937]"
-                              >
-                                En Stock
-                              </option>
-                              <option
-                                value="Asignado"
-                                className="bg-[#1f2937]"
-                              >
-                                Asignado
-                              </option>
-                              <option
-                                value="En Mantenimiento"
-                                className="bg-[#1f2937]"
-                              >
-                                Mantenimiento
-                              </option>
-                            </select>
-                          </div>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          {tienePermiso("modificacion") && (
-                            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                              <button
-                                onClick={() => startEdit(a)}
-                                className="text-slate-500 p-1.5 hover:text-white transition-colors cursor-pointer"
-                                title="Editar"
-                              >
-                                <Pencil size={14} />
-                              </button>
-                              <button
-                                onClick={() => deleteAsset(a._id)}
-                                className="text-slate-500 p-1.5 hover:text-red-400 transition-colors cursor-pointer"
-                                title="Eliminar"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="p-4 border-t border-dashed border-fuchsia-400/20 flex flex-wrap items-center justify-between gap-3 font-mono-data text-[11px]">
-                <div className="flex items-center gap-3 text-slate-500">
-                  <span>
-                    MOSTRANDO {String(filteredAssets.length === 0 ? 0 : (paginaSegura - 1) * itemsPorPagina + 1).padStart(3, "0")}–
-                    {String(Math.min(paginaSegura * itemsPorPagina, filteredAssets.length)).padStart(3, "0")} DE {filteredAssets.length}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    MOSTRAR
-                    <select
-                      value={itemsPorPagina}
-                      onChange={(e) => {
-                        setItemsPorPagina(Number(e.target.value));
-                        setCurrentPage(1);
-                      }}
-                      className="bg-[#0a0f1a] border border-fuchsia-400/20 text-slate-300 px-2 py-1 outline-none cursor-pointer focus:border-fuchsia-400 transition-colors"
-                    >
-                      {OPCIONES_TAMANO_PAGINA.map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      ))}
-                    </select>
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500">
-                    PÁGINA {String(paginaSegura).padStart(2, "0")} / {String(totalPaginas).padStart(2, "0")}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={paginaSegura === 1}
-                    onClick={() => setCurrentPage(paginaSegura - 1)}
-                    className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    type="button"
-                    disabled={paginaSegura === totalPaginas}
-                    onClick={() => setCurrentPage(paginaSegura + 1)}
-                    className="px-3 py-1.5 border border-fuchsia-400/20 text-slate-300 font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:border-fuchsia-400 transition-colors cursor-pointer"
-                  >
-                    Siguiente
-                  </button>
-                </div>
-              </div>
-            </section>
           </main>
         </>
       )}
