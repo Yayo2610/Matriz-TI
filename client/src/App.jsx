@@ -18,7 +18,6 @@ import {
   UserX,
   Upload,
   FileText,
-  Contact,
   ChevronDown,
   PackageOpen,
   Wrench,
@@ -164,7 +163,8 @@ function App() {
   const [personPageSize, setPersonPageSize] = useState(10);
   const personFileInputRef = useRef(null);
 
-  // 📥 CONSOLA DE APROVISIONAMIENTO: "manual" | "bulk-assets" | "bulk-personal"
+  // 📥 CONSOLA DE APROVISIONAMIENTO: "manual" | "bulk-assets"
+  // (la carga de personal vive únicamente en la pestaña "Personal")
   const [registerMode, setRegisterMode] = useState("manual");
 
   // 📋 BASE DE DATOS LOCAL DE PERSONAL (Directorio Corporativo Precargado)
@@ -720,6 +720,27 @@ function App() {
     });
   };
 
+  const handleDeleteAllEmployees = () => {
+    askConfirm(
+      "¿Estás seguro de eliminar TODO el directorio de personal?\n\nEsta acción es irreversible y borrará a todos los colaboradores permanentemente.",
+      async () => {
+        try {
+          const response = await axios.delete(
+            `${EMPLOYEES_URL}/clear`,
+            clientConfig,
+          );
+          pushToast(response.data.message, "success");
+          fetchEmployees();
+        } catch (err) {
+          pushToast(
+            `Error: ${err.response?.data?.error || "No se pudo eliminar"}`,
+            "error",
+          );
+        }
+      },
+    );
+  };
+
   const deleteUser = (id) => {
     askConfirm("¿Confirmas eliminar esta cuenta?", async () => {
       try {
@@ -1164,7 +1185,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-[#0a0f1a] text-slate-300 font-sans relative">
-      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(232,121,249,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(232,121,249,0.14)_1px,transparent_1px)] bg-[size:28px_28px]" />
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[linear-gradient(rgba(232,121,249,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(232,121,249,0.14)_1px,transparent_1px)] bg-[size:28px_28px]" />
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       <ConfirmModal
         dialog={confirmDialog}
@@ -1178,7 +1199,7 @@ function App() {
         }}
       />
       {/* CAJETÍN DE TÍTULO (identidad "plano técnico / manifiesto") */}
-      <header className="max-w-7xl mx-auto px-6 pt-6">
+      <header className="max-w-[1800px] mx-auto px-6 pt-6">
         <div className="grid md:grid-cols-[auto_1fr_auto] border border-fuchsia-400/25 bg-[#111827] divide-y md:divide-y-0 md:divide-x divide-dashed divide-fuchsia-400/20">
           <div className="flex items-center gap-3 px-5 py-4">
             <Crosshair className="text-fuchsia-400" size={30} strokeWidth={1.5} />
@@ -1259,7 +1280,7 @@ function App() {
       </header>
 
       {/* NAVEGACIÓN GLOBAL */}
-      <div className="max-w-7xl mx-auto px-6 mt-0 flex gap-0 overflow-x-auto border border-t-0 border-fuchsia-400/25">
+      <div className="max-w-[1800px] mx-auto px-6 mt-0 flex gap-0 overflow-x-auto border border-t-0 border-fuchsia-400/25">
         <button
           onClick={() => setCurrentView("inventario")}
           className={`px-5 py-2.5 font-mono-data font-bold text-[11px] uppercase tracking-wider border-r border-dashed border-fuchsia-400/15 cursor-pointer whitespace-nowrap ${currentView === "inventario" ? "bg-fuchsia-500 text-white" : "bg-[#111827] text-slate-400 hover:text-white"}`}
@@ -1301,10 +1322,10 @@ function App() {
       {/* ========================================================================= */}
       {currentView === "inventario" && (
         <>
-          <div className="max-w-7xl mx-auto px-6 pt-4">
+          <div className="max-w-[1800px] mx-auto px-6 pt-4">
             <DashboardGrid actualizarMetricas={actualizarMetricas} />
           </div>
-          <main className="max-w-7xl mx-auto p-6 grid lg:grid-cols-12 gap-9">
+          <main className="max-w-[1800px] mx-auto p-6 grid lg:grid-cols-12 gap-9">
             <section
               className={`${tienePermiso("escritura") ? "lg:col-span-9" : "lg:col-span-12"} relative bg-[#111827] border border-fuchsia-400/25 overflow-hidden`}
             >
@@ -1654,7 +1675,7 @@ function App() {
                   <span className="absolute -top-px -left-px w-2.5 h-2.5 border-t-2 border-l-2 border-fuchsia-400 pointer-events-none" />
                   <span className="absolute -top-px -right-px w-2.5 h-2.5 border-t-2 border-r-2 border-fuchsia-400 pointer-events-none" />
                   {/* SELECTOR DE MODO */}
-                  <div className="grid grid-cols-3 gap-1 bg-[#0a0f1a] p-1 border border-fuchsia-400/15 text-[9px] font-mono-data font-bold text-center uppercase tracking-wider">
+                  <div className="grid grid-cols-2 gap-1 bg-[#0a0f1a] p-1 border border-fuchsia-400/15 text-[9px] font-mono-data font-bold text-center uppercase tracking-wider">
                     <button
                       type="button"
                       onClick={() => setRegisterMode("manual")}
@@ -1668,13 +1689,6 @@ function App() {
                       className={`py-2 cursor-pointer transition-all ${registerMode === "bulk-assets" ? "bg-fuchsia-500 text-white" : "text-slate-500 hover:text-slate-300"}`}
                     >
                       + Activos
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRegisterMode("bulk-personal")}
-                      className={`py-2 cursor-pointer transition-all ${registerMode === "bulk-personal" ? "bg-fuchsia-500 text-white" : "text-slate-500 hover:text-slate-300"}`}
-                    >
-                      + Personal
                     </button>
                   </div>
 
@@ -1864,7 +1878,7 @@ function App() {
                           </button>
                         )}
                       </form>
-                    ) : registerMode === "bulk-assets" ? (
+                    ) : (
                       /* DROPZONE DE ACTIVOS */
                       <div className="flex flex-col items-center justify-center text-center space-y-4 h-full py-6">
                         <div className="p-4 bg-fuchsia-400/10 rounded-full">
@@ -1890,33 +1904,6 @@ function App() {
                           />
                         </label>
                       </div>
-                    ) : (
-                      /* DROPZONE DE PERSONAL */
-                      <div className="flex flex-col items-center justify-center text-center space-y-4 h-full py-6">
-                        <div className="p-4 bg-emerald-500/10 rounded-full">
-                          <Contact size={32} className="text-emerald-400" />
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-bold text-white">
-                            Importar Personal
-                          </h3>
-                          <p className="text-[10px] text-slate-500 mt-1 px-2">
-                            Precarga el archivo de nómina (.CSV) para
-                            automatizar la asignación. Con una primera fila
-                            de encabezado y columnas: Nombre, Apellido, Área.
-                            Reemplaza el directorio actual por completo.
-                          </p>
-                        </div>
-                        <label className="w-full py-3 bg-[#1f2937] hover:bg-[#2d3748] rounded-xl border border-white/5 cursor-pointer text-xs font-bold text-slate-300 transition-all">
-                          Seleccionar Archivo
-                          <input
-                            type="file"
-                            accept=".csv"
-                            className="hidden"
-                            onChange={handleBulkUploadEmployees}
-                          />
-                        </label>
-                      </div>
                     )}
                   </div>
                 </div>
@@ -1929,7 +1916,7 @@ function App() {
       {/* SECCIÓN OPERADORES ORIGINAL INTACTA */}
       {/* SECCIÓN OPERADORES (RESTAURADA EXACTAMENTE AL DISEÑO ORIGINAL) */}
       {currentView === "usuarios" && (
-        <main className="max-w-5xl mx-auto p-6 space-y-9">
+        <main className="max-w-[1800px] mx-auto p-6 space-y-9">
           {/* PANEL DE REGISTRO */}
           <div className="bg-[#111827] p-8 rounded-2xl border border-white/5 shadow-xl">
             <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
@@ -2261,7 +2248,7 @@ function App() {
         );
 
         return (
-          <main className="max-w-5xl mx-auto p-6">
+          <main className="max-w-[1800px] mx-auto p-6">
             <div className="relative border border-fuchsia-400/25 bg-[#111827]">
               <span className="absolute -top-px -left-px w-2.5 h-2.5 border-t-2 border-l-2 border-fuchsia-400 pointer-events-none" />
               <span className="absolute -top-px -right-px w-2.5 h-2.5 border-t-2 border-r-2 border-fuchsia-400 pointer-events-none" />
@@ -2271,9 +2258,23 @@ function App() {
                   <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
                   Directorio de personal
                 </h2>
-                <span className="font-mono-data text-[10px] text-slate-500">
-                  {personasFiltradas.length} registros
-                </span>
+                <div className="flex items-center gap-4">
+                  <span className="font-mono-data text-[10px] text-slate-500">
+                    {personasFiltradas.length} registros
+                  </span>
+                  {employeesDirectory.length > 0 && (
+                    <>
+                      <div className="w-px h-6 bg-fuchsia-400/15" />
+                      <button
+                        onClick={handleDeleteAllEmployees}
+                        className="flex items-center gap-2 bg-transparent hover:bg-red-600/10 border border-red-500/30 text-red-400/80 hover:text-red-400 px-3 py-1.5 font-mono-data text-[11px] font-bold uppercase tracking-wider transition-colors"
+                      >
+                        <Trash2 size={14} />
+                        Eliminar todos
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2 px-5 py-3 border-b border-dashed border-fuchsia-400/20">
@@ -2459,7 +2460,7 @@ function App() {
       {/* 🔐 SESIONES ACTIVAS (solo admin) */}
       {/* ========================================================================= */}
       {currentView === "sesiones" && role === "admin" && (
-        <main className="max-w-5xl mx-auto p-6">
+        <main className="max-w-[1800px] mx-auto p-6">
           <div className="border border-fuchsia-400/25 bg-[#111827]">
             <div className="flex items-center justify-between px-5 py-3 border-b border-dashed border-fuchsia-400/20">
               <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
@@ -2520,7 +2521,7 @@ function App() {
 
       {/* CONFIGURACIONES ORIGINAL INTACTA */}
       {currentView === "configuraciones" && (
-        <main className="max-w-5xl mx-auto p-6">
+        <main className="max-w-[1800px] mx-auto p-6">
           <div className="bg-[#111827] rounded-2xl border border-white/5 p-8 space-y-6 shadow-xl">
             <h2 className="text-xl font-black text-white flex items-center gap-2">
               <Settings className="text-fuchsia-400" /> Configuración Global

@@ -866,6 +866,27 @@ app.put(
   },
 );
 
+// Borra el directorio de personal completo (solo admin), igual que
+// "Eliminar todos" en activos. Va ANTES de /:id para que Express no
+// confunda "clear" con un id.
+app.delete(
+  "/api/employees/clear",
+  verificarToken,
+  verificarRol("admin"),
+  async (req, res) => {
+    try {
+      const result = await Employee.deleteMany({});
+      res.json({
+        success: true,
+        message: `Se eliminaron ${result.deletedCount} colaboradores permanentemente.`,
+        deletedCount: result.deletedCount,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+
 // Baja individual.
 app.delete(
   "/api/employees/:id",
