@@ -25,6 +25,7 @@ import {
   Wrench,
   KeyRound,
   ArrowLeft,
+  Crosshair,
 } from "lucide-react";
 import DashboardGrid from "./components/DashboardGrid";
 import { ToastContainer } from "./components/Toast";
@@ -144,6 +145,12 @@ function App() {
   const [editUserId, setEditUserId] = useState(null);
   const [registeredUsers, setRegisteredUsers] = useState([]);
   const [mostrarUsuarios, setMostrarUsuarios] = useState(false);
+
+  // 🕓 ÚLTIMA SINCRONIZACIÓN (cajetín de título)
+  const [lastSyncAt, setLastSyncAt] = useState(null);
+  // Su valor no se lee; solo fuerza un re-render cada segundo para que
+  // "hace N s" se mantenga actualizado en el cajetín de título.
+  const [_reloj, setReloj] = useState(0);
 
   // 🔐 SESIONES ACTIVAS (solo admin)
   const [sesionesActivas, setSesionesActivas] = useState([]);
@@ -604,6 +611,7 @@ function App() {
     try {
       const res = await axios.get(API_URL, clientConfig);
       setAssets(res.data);
+      setLastSyncAt(Date.now());
     } catch (error) {
       console.error(error);
     } finally {
@@ -806,6 +814,20 @@ function App() {
   useEffect(() => {
     if (token) fetchAssets();
   }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    const intervalId = setInterval(() => setReloj((r) => r + 1), 1000);
+    return () => clearInterval(intervalId);
+  }, [token]);
+
+  const formatoUltimaSincronizacion = () => {
+    if (!lastSyncAt) return "—";
+    const segundos = Math.max(0, Math.round((Date.now() - lastSyncAt) / 1000));
+    if (segundos < 60) return `hace ${segundos} s`;
+    const minutos = Math.round(segundos / 60);
+    return `hace ${minutos} min`;
+  };
 
   useEffect(() => {
     if (token) fetchEmployees();
@@ -1152,15 +1174,13 @@ function App() {
       <header className="max-w-7xl mx-auto px-6 pt-6">
         <div className="grid md:grid-cols-[auto_1fr_auto] border border-fuchsia-400/25 bg-[#111827] divide-y md:divide-y-0 md:divide-x divide-dashed divide-fuchsia-400/20">
           <div className="flex items-center gap-3 px-5 py-4">
-            <div className="bg-gradient-to-br from-fuchsia-500 to-purple-600 p-2 rounded-lg shadow-[0_0_20px_-6px_rgba(232,121,249,0.28)]">
-              <Laptop className="text-white" size={22} />
-            </div>
+            <Crosshair className="text-fuchsia-400" size={30} strokeWidth={1.5} />
             <div>
               <div className="font-display font-black text-sm tracking-widest uppercase">
                 Asset<span className="text-fuchsia-400">Track</span>
               </div>
               <div className="font-mono-data text-[9px] text-slate-500 tracking-wider">
-                REGISTRO DE EQUIPO
+                REGISTRO DE EQUIPO · REV. 04
               </div>
             </div>
           </div>
@@ -1168,25 +1188,18 @@ function App() {
           <div className="grid grid-cols-2 sm:grid-cols-3">
             <div className="px-5 py-3 border-r border-dashed border-fuchsia-400/15 flex flex-col justify-center">
               <div className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
-                Titular
+                Estado del sistema
               </div>
-              <div className="font-mono-data text-sm font-semibold capitalize truncate">
-                {userNombre} {userApellido}
-              </div>
-            </div>
-            <div className="px-5 py-3 border-r border-dashed border-fuchsia-400/15 flex flex-col justify-center">
-              <div className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
-                Rol
-              </div>
-              <div className="font-mono-data text-sm font-semibold text-fuchsia-400 uppercase">
-                {role}
+              <div className="font-mono-data text-sm font-semibold text-emerald-400 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,.18)]" />
+                Operativo
               </div>
             </div>
-            {role === "admin" && (
+            {role === "admin" ? (
               <button
                 type="button"
                 onClick={() => setCurrentView("sesiones")}
-                className="hidden sm:flex px-5 py-3 flex-col justify-center text-left cursor-pointer hover:bg-white/[0.02] transition-colors"
+                className="px-5 py-3 flex flex-col justify-center text-left cursor-pointer hover:bg-white/[0.02] transition-colors border-r border-dashed border-fuchsia-400/15"
               >
                 <div className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
                   Sesiones activas
@@ -1195,18 +1208,46 @@ function App() {
                   {sesionesActivas.length.toString().padStart(2, "0")} dispositivos →
                 </div>
               </button>
+            ) : (
+              <div className="px-5 py-3 flex flex-col justify-center border-r border-dashed border-fuchsia-400/15">
+                <div className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
+                  Rol
+                </div>
+                <div className="font-mono-data text-sm font-semibold text-fuchsia-400 uppercase">
+                  {role}
+                </div>
+              </div>
             )}
+            <div className="hidden sm:flex px-5 py-3 flex-col justify-center">
+              <div className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
+                Última sincronización
+              </div>
+              <div className="font-mono-data text-sm font-semibold">
+                {formatoUltimaSincronizacion()}
+              </div>
+            </div>
           </div>
 
-          <button
-            onClick={logout}
-            className="flex items-center justify-center gap-2 px-6 py-4 text-slate-400 hover:text-red-400 hover:bg-red-500/5 transition cursor-pointer"
-          >
-            <LogOut size={18} />
-            <span className="font-mono-data text-xs font-bold uppercase tracking-widest">
-              Salir
-            </span>
-          </button>
+          <div className="flex items-center gap-3 px-5 py-3">
+            <div className="w-9 h-9 border border-fuchsia-400/25 flex items-center justify-center font-mono-data text-[11px] font-bold text-fuchsia-400 shrink-0">
+              {`${userNombre?.[0] || ""}${userApellido?.[0] || ""}`.toUpperCase()}
+            </div>
+            <div className="leading-tight">
+              <div className="text-sm font-bold capitalize whitespace-nowrap">
+                {userNombre} {userApellido}
+              </div>
+              <div className="font-mono-data text-[9px] font-bold uppercase tracking-widest text-fuchsia-400">
+                {role}
+              </div>
+            </div>
+            <button
+              onClick={logout}
+              title="Salir"
+              className="ml-2 w-9 h-9 flex items-center justify-center border border-fuchsia-400/20 text-slate-400 hover:text-red-400 hover:border-red-400/40 transition-colors cursor-pointer shrink-0"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -1224,13 +1265,13 @@ function App() {
               onClick={() => setCurrentView("personal")}
               className={`px-5 py-2.5 font-mono-data font-bold text-[11px] uppercase tracking-wider border-r border-dashed border-fuchsia-400/15 cursor-pointer whitespace-nowrap ${currentView === "personal" ? "bg-fuchsia-500 text-white" : "bg-[#111827] text-slate-400 hover:text-white"}`}
             >
-              Personal
+              Personal <span className="opacity-75">{employeesDirectory.length}</span>
             </button>
             <button
               onClick={() => setCurrentView("sesiones")}
               className={`px-5 py-2.5 font-mono-data font-bold text-[11px] uppercase tracking-wider border-r border-dashed border-fuchsia-400/15 cursor-pointer whitespace-nowrap ${currentView === "sesiones" ? "bg-fuchsia-500 text-white" : "bg-[#111827] text-slate-400 hover:text-white"}`}
             >
-              Sesiones activas
+              Sesiones <span className="opacity-75">{sesionesActivas.length.toString().padStart(2, "0")}</span>
             </button>
             <button
               onClick={() => setCurrentView("usuarios")}
@@ -1260,7 +1301,9 @@ function App() {
             {tienePermiso("escritura") && (
               /* --- ESTE ES EL PANEL LATERAL CON LA MEJORA VISUAL EXACTA --- */
               <aside className="lg:col-span-3">
-                <div className="bg-[#111827] p-5 border border-fuchsia-400/25 sticky top-28 space-y-6">
+                <div className="relative bg-[#111827] p-5 border border-fuchsia-400/25 sticky top-28 space-y-6">
+                  <span className="absolute -top-px -left-px w-2.5 h-2.5 border-t-2 border-l-2 border-fuchsia-400 pointer-events-none" />
+                  <span className="absolute -top-px -right-px w-2.5 h-2.5 border-t-2 border-r-2 border-fuchsia-400 pointer-events-none" />
                   {/* SELECTOR DE MODO */}
                   <div className="grid grid-cols-3 gap-1 bg-[#0a0f1a] p-1 border border-fuchsia-400/15 text-[9px] font-mono-data font-bold text-center uppercase tracking-wider">
                     <button
@@ -1297,7 +1340,7 @@ function App() {
                           ) : (
                             <PlusCircle className="text-fuchsia-400" size={16} />
                           )}
-                          {isEditing ? "Editar Activo" : "Registrar Activo"}
+                          {isEditing ? "Editar Activo" : "Alta Rápida"}
                         </h2>
                         <div className="space-y-1">
                           <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
@@ -1536,8 +1579,10 @@ function App() {
             )}
 
             <section
-              className={`${tienePermiso("escritura") ? "lg:col-span-9" : "lg:col-span-12"} bg-[#111827] border border-fuchsia-400/25 overflow-hidden`}
+              className={`${tienePermiso("escritura") ? "lg:col-span-9" : "lg:col-span-12"} relative bg-[#111827] border border-fuchsia-400/25 overflow-hidden`}
             >
+              <span className="absolute -top-px -left-px w-2.5 h-2.5 border-t-2 border-l-2 border-fuchsia-400 pointer-events-none z-10" />
+              <span className="absolute -top-px -right-px w-2.5 h-2.5 border-t-2 border-r-2 border-fuchsia-400 pointer-events-none z-10" />
               <div className="px-6 py-4 border-b border-dashed border-fuchsia-400/20 flex justify-between items-center bg-white/[0.01]">
                 <h2 className="font-mono-data text-xs font-bold uppercase tracking-widest flex items-center gap-2">
                   <span className="w-1 h-3.5 bg-fuchsia-400 inline-block" />
@@ -1640,13 +1685,13 @@ function App() {
                     <tr>
                       <th className="px-6 py-3 text-left">Hardware</th>
                       <th className="px-6 py-3 text-left">Tipo</th>
-                      <th className="px-6 py-3 text-left">Serial No.</th>
+                      <th className="px-6 py-3 text-left">Serial</th>
                       <th className="px-6 py-3 text-left whitespace-nowrap">
-                        Asignado a
+                        Titular
                       </th>
                       <th className="px-6 py-3 text-left">Área</th>
                       <th className="px-6 py-3 text-right whitespace-nowrap">
-                        Estado y Acciones
+                        Estado
                       </th>
                     </tr>
                   </thead>
@@ -1800,14 +1845,14 @@ function App() {
                               <span className="inline-flex items-center gap-1">
                                 <button
                                   onClick={() => startEdit(a)}
-                                  className="text-yellow-500 p-1.5 rounded-lg hover:bg-yellow-500/10 transition-colors cursor-pointer"
+                                  className="text-slate-500 p-1.5 hover:text-white transition-colors cursor-pointer"
                                   title="Editar"
                                 >
                                   <Pencil size={14} />
                                 </button>
                                 <button
                                   onClick={() => deleteAsset(a._id)}
-                                  className="text-red-500 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer"
+                                  className="text-slate-500 p-1.5 hover:text-red-400 transition-colors cursor-pointer"
                                   title="Eliminar"
                                 >
                                   <Trash2 size={14} />
