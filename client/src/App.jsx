@@ -2059,7 +2059,7 @@ function App() {
                       return (
                         <div
                           key={u._id}
-                          className="grid grid-cols-[32px_1fr_112px_92px_98px_60px] items-center gap-3 px-4 py-3"
+                          className="grid grid-cols-[32px_1fr_204px_98px_60px] items-center gap-3 px-4 py-3"
                         >
                           <div className="w-8 h-8 border border-fuchsia-400/20 flex items-center justify-center font-mono-data text-[10px] font-bold text-cyan-300 shrink-0">
                             {(u.nombre?.[0] || "") + (u.apellido?.[0] || "")}
@@ -2072,45 +2072,48 @@ function App() {
                               {u.email}
                             </div>
                           </div>
-                          <span
-                            className={`inline-flex items-center gap-1.5 font-mono-data text-[9px] font-bold uppercase tracking-widest px-2 py-1 border w-fit ${rs.pill}`}
-                          >
+                          <div className="flex items-center gap-2 min-w-0">
                             <span
-                              className={`w-1.5 h-1.5 rounded-full ${rs.dot}`}
-                            />
-                            {rs.label}
-                          </span>
-                          <div className="flex gap-1">
-                            <span
-                              title="Lectura"
-                              className={`w-5 h-5 flex items-center justify-center border font-mono-data text-[9px] ${
-                                u.permisos?.lectura
-                                  ? "border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300 font-bold"
-                                  : "border-white/10 text-slate-600"
-                              }`}
+                              title={rs.label}
+                              className={`inline-flex items-center gap-1.5 font-mono-data text-[9px] font-bold uppercase tracking-widest px-2 py-1 border max-w-[104px] shrink-0 ${rs.pill}`}
                             >
-                              L
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${rs.dot}`}
+                              />
+                              <span className="truncate">{rs.label}</span>
                             </span>
-                            <span
-                              title="Escritura"
-                              className={`w-5 h-5 flex items-center justify-center border font-mono-data text-[9px] ${
-                                u.permisos?.escritura
-                                  ? "border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300 font-bold"
-                                  : "border-white/10 text-slate-600"
-                              }`}
-                            >
-                              E
-                            </span>
-                            <span
-                              title="Modificación"
-                              className={`w-5 h-5 flex items-center justify-center border font-mono-data text-[9px] ${
-                                u.permisos?.modificacion
-                                  ? "border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300 font-bold"
-                                  : "border-white/10 text-slate-600"
-                              }`}
-                            >
-                              M
-                            </span>
+                            <div className="flex gap-1 shrink-0">
+                              <span
+                                title="Lectura"
+                                className={`w-5 h-5 flex items-center justify-center border font-mono-data text-[9px] ${
+                                  u.permisos?.lectura
+                                    ? "border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300 font-bold"
+                                    : "border-white/10 text-slate-600"
+                                }`}
+                              >
+                                L
+                              </span>
+                              <span
+                                title="Escritura"
+                                className={`w-5 h-5 flex items-center justify-center border font-mono-data text-[9px] ${
+                                  u.permisos?.escritura
+                                    ? "border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300 font-bold"
+                                    : "border-white/10 text-slate-600"
+                                }`}
+                              >
+                                E
+                              </span>
+                              <span
+                                title="Modificación"
+                                className={`w-5 h-5 flex items-center justify-center border font-mono-data text-[9px] ${
+                                  u.permisos?.modificacion
+                                    ? "border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300 font-bold"
+                                    : "border-white/10 text-slate-600"
+                                }`}
+                              >
+                                M
+                              </span>
+                            </div>
                           </div>
                           {u.esActual ? (
                             <span className="flex items-center gap-1.5 font-mono-data text-[9px] font-bold uppercase text-emerald-400">
