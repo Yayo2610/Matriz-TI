@@ -197,7 +197,7 @@ function App() {
     apellido: "",
     email: "",
     password: "",
-    role: "tecnico",
+    role: "Técnico",
     permisos: { lectura: true, escritura: false, modificacion: false },
   });
   const [userSearch, setUserSearch] = useState("");
@@ -487,6 +487,7 @@ function App() {
       );
       return;
     }
+    const rolNormalizado = userForm.role.trim().toLowerCase() || "tecnico";
     if (isEditingUser) {
       try {
         await axios.put(
@@ -494,7 +495,7 @@ function App() {
           {
             nombre: userForm.nombre,
             apellido: userForm.apellido,
-            role: userForm.role,
+            role: rolNormalizado,
             permisos: userForm.permisos,
             ...(seEscribioPassword ? { password: userForm.password } : {}),
           },
@@ -519,7 +520,7 @@ function App() {
             apellido: userForm.apellido,
             email: userForm.email,
             password: userForm.password,
-            role: userForm.role,
+            role: rolNormalizado,
             permisos: userForm.permisos,
           },
           clientConfig,
@@ -539,7 +540,7 @@ function App() {
       apellido: "",
       email: "",
       password: "",
-      role: "tecnico",
+      role: "Técnico",
       permisos: { lectura: true, escritura: false, modificacion: false },
     });
   };
@@ -569,7 +570,7 @@ function App() {
       apellido: "",
       email: "",
       password: "",
-      role: "tecnico",
+      role: "Técnico",
       permisos: { lectura: true, escritura: false, modificacion: false },
     });
   };
@@ -2050,7 +2051,11 @@ function App() {
 
                   <div className="divide-y divide-dashed divide-fuchsia-400/10">
                     {usuariosPaginados.map((u) => {
-                      const rs = ROLE_STYLES[u.role] || ROLE_STYLES.tecnico;
+                      const rs = ROLE_STYLES[u.role] || {
+                        label: u.role || "Técnico",
+                        pill: "text-slate-300 border-slate-400/40 bg-slate-400/10",
+                        dot: "bg-slate-400",
+                      };
                       return (
                         <div
                           key={u._id}
@@ -2325,6 +2330,25 @@ function App() {
                       <p className="font-mono-data text-[9px] text-slate-500 flex items-center gap-1.5 px-1">
                         <ShieldCheck size={11} />
                         Mínimo 8 dígitos, 1 Mayúscula y 1 Número.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-slate-500 uppercase font-black tracking-wider block px-1">
+                        Rol
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full p-3.5 bg-[#1f2937] outline-none text-white border border-fuchsia-400/20 focus:border-fuchsia-400 transition-colors text-sm placeholder-slate-500"
+                        placeholder="Técnico"
+                        value={userForm.role}
+                        onChange={(e) =>
+                          setUserForm({ ...userForm, role: e.target.value })
+                        }
+                        required
+                      />
+                      <p className="text-[9px] text-slate-500 px-1">
+                        Por defecto: Técnico. Escribe el rol exacto (Admin, Coordinador, etc.).
                       </p>
                     </div>
 

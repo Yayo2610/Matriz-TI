@@ -158,7 +158,8 @@ const User =
         role: {
           type: String,
           required: true,
-          enum: ["admin", "tecnico", "coordinador"],
+          trim: true,
+          lowercase: true,
         },
         permisos: {
           lectura: { type: Boolean, default: true },
